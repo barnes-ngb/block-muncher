@@ -1,5 +1,5 @@
 {
-    "name": "block-muncher",
+    "name": "block-muncher - Copy",
     "description": "",
     "dependencies": {
         "device": "*"
@@ -20,5 +20,5 @@
     "supportedTargets": [
         "arcade"
     ],
-    "preferredEditor": "tsprj"
+    "preferredEditor": "blocksprj"
 }
