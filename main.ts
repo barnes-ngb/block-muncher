@@ -73,6 +73,7 @@ let CREEPER_SPEED = 30
 let SKELETON_SPEED = 20
 let ARROW_SPEED = 70
 let HURT_COOLDOWN_MS = 1000
+let REACH = 32
 
 // ===== INVENTORY =====
 let wood = 0
@@ -571,7 +572,15 @@ function punch (block: Sprite) {
     }
 }
 
-// Find the block you are standing on, if any.
+// Mobs bounce away or explode when they touch you, so you can hit them
+// from a little way off: anything within REACH pixels counts.
+function inReach (thing: Sprite) {
+    let dx = thing.x - hero.x
+    let dy = thing.y - hero.y
+    return Math.sqrt(dx * dx + dy * dy) <= REACH
+}
+
+// Find the block you are standing on, or a mob within reach.
 function findTarget () {
     target = null
     for (let tree of sprites.allOfKind(SpriteKind.Tree)) {
@@ -610,22 +619,22 @@ function findTarget () {
         }
     }
     for (let zombie of sprites.allOfKind(SpriteKind.Zombie)) {
-        if (hero.overlapsWith(zombie)) {
+        if (inReach(zombie)) {
             target = zombie
         }
     }
     for (let spider of sprites.allOfKind(SpriteKind.Spider)) {
-        if (hero.overlapsWith(spider)) {
+        if (inReach(spider)) {
             target = spider
         }
     }
     for (let creeper of sprites.allOfKind(SpriteKind.Creeper)) {
-        if (hero.overlapsWith(creeper)) {
+        if (inReach(creeper)) {
             target = creeper
         }
     }
     for (let skeleton of sprites.allOfKind(SpriteKind.Skeleton)) {
-        if (hero.overlapsWith(skeleton)) {
+        if (inReach(skeleton)) {
             target = skeleton
         }
     }
@@ -654,6 +663,11 @@ function onBed () {
 }
 
 function goToSleep () {
+    // Leave night BEFORE the pause, so mobs stop and the clock cannot
+    // also start the morning while you are asleep.
+    isNight = false
+    secondsLeft = DAY_SECONDS
+    clearMobs()
     scene.setBackgroundColor(15)
     hero.sayText("Zzz...", 1500, false)
     pause(1500)
