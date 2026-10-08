@@ -1,4 +1,4 @@
-// BLOCK MUNCHER v4: DAY AND NIGHT
+// BLOCK MUNCHER v4: DAY AND NIGHT, IN A BIG WORLD
 // Designed by Lincoln and London:
 //   "One minute in the morning, then it's night time, and there will be
 //    monsters: zombies and spiders and creepers and a skeleton. When the
@@ -31,6 +31,10 @@
 //   Punch mobs to beat them (score, top right). Morning clears them away.
 //   Armor blocks half the hits. Press B with food to eat (+1 heart).
 //   Sleep in your bed at night to skip to morning.
+//
+// THE WORLD is bigger than the screen. Walk to the edge and the camera
+// follows you. Change WORLD_WIDTH and WORLD_HEIGHT to make it bigger
+// (the screen is 160 wide and 120 tall).
 
 namespace SpriteKind {
     export const Tree = SpriteKind.create()
@@ -48,18 +52,23 @@ namespace SpriteKind {
     export const Table = SpriteKind.create()
     export const Box = SpriteKind.create()
     export const Hud = SpriteKind.create()
+    export const Decor = SpriteKind.create()
 }
 
 // ===== TUNING KNOBS: change one, play, and see if it got more fun =====
+let WORLD_WIDTH = 480
+let WORLD_HEIGHT = 360
+let GRASS_TUFTS = 40
 let TREE_HITS = 3
 let STONE_HITS = 5
 let IRON_HITS = 6
 let PICKAXE_POWER = 3
-let MAX_BLOCKS = 12
+let MAX_BLOCKS = 30
 let RESPAWN_MS = 3000
 let ANIMAL_HITS = 2
-let MAX_ANIMALS = 4
+let MAX_ANIMALS = 8
 let ANIMAL_SPEED = 20
+let ANIMAL_RESPAWN_MS = 10000
 let DAY_SECONDS = 60
 let NIGHT_SECONDS = 120
 let START_HEARTS = 5
@@ -97,6 +106,87 @@ let hasArmor = false
 let target: Sprite = null
 let lastTarget: Sprite = null
 let hitsSoFar = 0
+
+// ===== THE WORLD =====
+function randomSpotX () {
+    return randint(10, WORLD_WIDTH - 10)
+}
+
+function randomSpotY () {
+    return randint(16, WORLD_HEIGHT - 16)
+}
+
+// Where the camera is looking. It follows you, but stops at the world's edge.
+function cameraX () {
+    return Math.constrain(hero.x, 80, WORLD_WIDTH - 80)
+}
+
+function cameraY () {
+    // +18 so the bottom of the world can scroll up above the text bar
+    return Math.constrain(hero.y, 60, WORLD_HEIGHT - 60 + 18)
+}
+
+// Animals walk anywhere in the world, and turn around at its edge.
+function keepInWorld (kind: number) {
+    for (let critter of sprites.allOfKind(kind)) {
+        if (critter.x < 8) {
+            critter.x = 8
+            critter.vx = Math.abs(critter.vx)
+        } else if (critter.x > WORLD_WIDTH - 8) {
+            critter.x = WORLD_WIDTH - 8
+            critter.vx = 0 - Math.abs(critter.vx)
+        }
+        if (critter.y < 8) {
+            critter.y = 8
+            critter.vy = Math.abs(critter.vy)
+        } else if (critter.y > WORLD_HEIGHT - 8) {
+            critter.y = WORLD_HEIGHT - 8
+            critter.vy = 0 - Math.abs(critter.vy)
+        }
+    }
+}
+
+game.onUpdate(function () {
+    hero.x = Math.constrain(hero.x, 8, WORLD_WIDTH - 8)
+    hero.y = Math.constrain(hero.y, 8, WORLD_HEIGHT - 8)
+    scene.centerCameraAt(cameraX(), cameraY())
+    keepInWorld(SpriteKind.Pig)
+    keepInWorld(SpriteKind.Cow)
+    keepInWorld(SpriteKind.Sheep)
+    keepInWorld(SpriteKind.Chicken)
+})
+
+// Little grass tufts and flowers, so you can see yourself moving.
+function plantGrass () {
+    for (let index = 0; index < GRASS_TUFTS; index++) {
+        let tuft: Sprite = null
+        if (Math.percentChance(25)) {
+            tuft = sprites.create(img`
+                . . . . . . . .
+                . . . 5 . . . .
+                . . 5 2 5 . . .
+                . . . 5 . . . .
+                . . . 6 . . . .
+                . . 6 6 . . . .
+                . . . 6 . . . .
+                . . . . . . . .
+                `, SpriteKind.Decor)
+        } else {
+            tuft = sprites.create(img`
+                . . . . . . . .
+                . . . . . . . .
+                . . . . . . . .
+                . 6 . . 6 . . .
+                . 6 . 6 . . 6 .
+                . . 6 6 . 6 . .
+                . . . 6 6 . . .
+                . . . . . . . .
+                `, SpriteKind.Decor)
+        }
+        tuft.setPosition(randomSpotX(), randomSpotY())
+        tuft.z = -10
+    }
+}
 
 // ===== SPAWNING BLOCKS =====
 function spawnBlock () {
@@ -160,7 +250,7 @@ function spawnBlock () {
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Iron)
     }
-    block.setPosition(randint(10, 150), randint(16, 94))
+    block.setPosition(randomSpotX(), randomSpotY())
 }
 
 // ===== ANIMALS =====
@@ -244,8 +334,7 @@ function spawnAnimal () {
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Chicken)
     }
-    animal.setPosition(randint(10, 150), randint(16, 94))
-    animal.setBounceOnWall(true)
+    animal.setPosition(randomSpotX(), randomSpotY())
 }
 
 function wanderAll (kind: number) {
@@ -352,17 +441,24 @@ function spawnMob () {
             . . . . . 1 1 . . 1 1 . . . . .
             `, SpriteKind.Skeleton)
     }
-    // Mobs come in from a random edge of the screen.
+    // Mobs come in from just past the edge of what you can see.
     let side = randint(1, 4)
+    let mobX = 0
+    let mobY = 0
     if (side == 1) {
-        mob.setPosition(0, randint(16, 94))
+        mobX = cameraX() - 88
+        mobY = randint(cameraY() - 50, cameraY() + 30)
     } else if (side == 2) {
-        mob.setPosition(160, randint(16, 94))
+        mobX = cameraX() + 88
+        mobY = randint(cameraY() - 50, cameraY() + 30)
     } else if (side == 3) {
-        mob.setPosition(randint(10, 150), 0)
+        mobX = randint(cameraX() - 70, cameraX() + 70)
+        mobY = cameraY() - 68
     } else {
-        mob.setPosition(randint(10, 150), 100)
+        mobX = randint(cameraX() - 70, cameraX() + 70)
+        mobY = cameraY() + 50
     }
+    mob.setPosition(Math.constrain(mobX, 0, WORLD_WIDTH), Math.constrain(mobY, 0, WORLD_HEIGHT))
 }
 
 function isMob (thing: Sprite) {
@@ -696,7 +792,7 @@ function nearTable () {
 }
 
 function placeBeside (thing: Sprite) {
-    if (hero.x > 130) {
+    if (hero.x > WORLD_WIDTH - 30) {
         thing.setPosition(hero.x - 18, hero.y)
     } else {
         thing.setPosition(hero.x + 18, hero.y)
@@ -878,9 +974,8 @@ let hero = sprites.create(img`
     . . . . 8 8 8 . . 8 8 8 . . . .
     . . . . e e e . . e e e . . . .
     `, SpriteKind.Player)
-hero.setPosition(80, 56)
+hero.setPosition(WORLD_WIDTH / 2, WORLD_HEIGHT / 2)
 info.setLife(START_HEARTS)
-hero.setStayInScreen(true)
 hero.z = 10
 controller.moveSprite(hero)
 scene.setBackgroundColor(7)
@@ -889,9 +984,11 @@ let hud = sprites.create(image.create(160, 18), SpriteKind.Hud)
 hud.left = 0
 hud.top = 102
 hud.z = 100
+hud.setFlag(SpriteFlag.RelativeToCamera, true)
 updateHud()
 
-for (let index = 0; index < 8; index++) {
+plantGrass()
+for (let index = 0; index < MAX_BLOCKS; index++) {
     spawnBlock()
 }
 
@@ -913,8 +1010,8 @@ game.onUpdateInterval(RESPAWN_MS, function () {
     }
 })
 
-// Animals come back slowly, so do not punch them all at once.
-game.onUpdateInterval(10000, function () {
+// Animals come back one at a time. Make ANIMAL_RESPAWN_MS smaller for more.
+game.onUpdateInterval(ANIMAL_RESPAWN_MS, function () {
     if (animalCount() < MAX_ANIMALS) {
         spawnAnimal()
     }
