@@ -482,8 +482,9 @@ function buildHouse () {
     }
 }
 
-// Anything that was where the walls went: blocks go away, animals and
-// mobs move out, and your table, box, bed or furnace moves inside.
+// Anything that was where the walls went: blocks go away, animals, grass
+// and mobs move out of the whole house, and your table, box, bed or
+// furnace moves inside.
 function clearHouseSpot (c: number, r: number) {
     for (let thing of sprites.allOfKind(SpriteKind.Tree).concat(sprites.allOfKind(SpriteKind.Stone)).concat(sprites.allOfKind(SpriteKind.Iron)).concat(sprites.allOfKind(SpriteKind.Gold)).concat(sprites.allOfKind(SpriteKind.Coal))) {
         if (inHouseWall(thing, c, r)) {
@@ -491,7 +492,7 @@ function clearHouseSpot (c: number, r: number) {
         }
     }
     for (let critter of sprites.allOfKind(SpriteKind.Pig).concat(sprites.allOfKind(SpriteKind.Cow)).concat(sprites.allOfKind(SpriteKind.Sheep)).concat(sprites.allOfKind(SpriteKind.Chicken)).concat(sprites.allOfKind(SpriteKind.Horse)).concat(sprites.allOfKind(SpriteKind.Decor))) {
-        if (critter != ridden && inHouseWall(critter, c, r)) {
+        if (critter != ridden && (inHouseWall(critter, c, r) || inHouse(critter, c, r))) {
             placeOnGrass(critter)
         }
     }
