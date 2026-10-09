@@ -989,6 +989,10 @@ function spawnMob () {
         mobY = cameraY() + 50
     }
     mob.setPosition(Math.constrain(mobX, 8, WORLD_WIDTH - 8), Math.constrain(mobY, 8, WORLD_HEIGHT - 8))
+    // Never start a mob in the house, or in its walls.
+    if (houseCol >= 0 && (inHouseWall(mob, houseCol, houseRow) || inHouse(mob, houseCol, houseRow))) {
+        mob.destroy()
+    }
 }
 
 function isMob (thing: Sprite) {
