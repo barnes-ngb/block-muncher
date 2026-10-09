@@ -42,6 +42,8 @@ let boxes = 0
 let food = 0
 let wool = 0
 let leather = 0
+let sand = 0
+let hasShovel = false
 let gold = 0
 let hasIronPickaxe = false
 let hasSaddle = false
@@ -73,8 +75,223 @@ let lastTarget: Sprite = null
 let hitsSoFar = 0
 
 // ===== THE WORLD =====
+// The ground is a tilemap: grass, then a beach, then the ocean on the
+// right-hand side. The shoreline wiggles a little from row to row.
+let grassTile = img`
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    7 7 7 7 7 7 7 7 7 7 7 7 7 7 7 7
+    `
+let sandTile = img`
+    d d d d d d d d d d d d d d d d
+    d d d d d d d d d d d b d d d d
+    d d b d d d d d d d d d d d d d
+    d d d d d d d d d d d d d d d d
+    d d d d d d d b d d d d d d d d
+    d d d d d d d d d d d d d d b d
+    d d d d d d d d d d d d d d d d
+    d b d d d d d d d d d d d d d d
+    d d d d d d d d d d b d d d d d
+    d d d d d b d d d d d d d d d d
+    d d d d d d d d d d d d d d d d
+    d d d d d d d d d d d d d b d d
+    d d d b d d d d d d d d d d d d
+    d d d d d d d d b d d d d d d d
+    d d d d d d d d d d d d d d d d
+    d d d d d d d d d d d d d d d d
+    `
+let waterTile = img`
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 9 9 8 8 8 8 8 8 8 8 8 8 8 8
+    8 9 8 8 9 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 9 9 8 8 8
+    8 8 8 8 8 8 8 8 8 8 9 8 8 9 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 9 9 8 8 8 8 8 8 8 8 8
+    8 8 8 8 9 8 8 9 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 9 9 8
+    8 8 8 8 8 8 8 8 8 8 8 8 9 8 8 9
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    8 8 8 8 8 8 8 8 8 8 8 8 8 8 8 8
+    `
+// A hole where you dug sand. It fills back in every morning.
+let holeTile = img`
+    d d d d d d d d d d d d d d d d
+    d d d d d d d d d d d d d d d d
+    d d d d b b b b b b b b d d d d
+    d d d b e e e e e e e e b d d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d b e e e e e e e e e e b d d
+    d d d b e e e e e e e e b d d d
+    d d d d b b b b b b b b d d d d
+    d d d d d d d d d d d d d d d d
+    d d d d d d d d d d d d d d d d
+    `
+// Tile numbers in the map.
+let GRASS = 0
+let SAND = 1
+let WATER = 2
+let HOLE = 3
+// The same map with darker tiles for night. Both share one set of tiles,
+// so a hole dug in the day is still there at night.
+let dayMap: tiles.TileMapData = null
+let nightMap: tiles.TileMapData = null
+// Everything left of landRight is grass. Animals stay left of seaLeft.
+let landRight = 0
+let seaLeft = 0
+let heroSpeed = 0
+let digCol = -1
+let digRow = -1
+let digsSoFar = 0
+
+function buildWorld () {
+    // The world is made of 16x16 tiles, so round the size down to whole tiles.
+    let cols = Math.max(12, Math.idiv(WORLD_WIDTH, 16))
+    let rows = Math.max(8, Math.idiv(WORLD_HEIGHT, 16))
+    WORLD_WIDTH = cols * 16
+    WORLD_HEIGHT = rows * 16
+    // Two extra rows under the world so its bottom can scroll up above the
+    // text bar. They are walls, so nothing walks into them.
+    let mapRows = rows + 2
+    let ocean = Math.constrain(OCEAN_TILES, 0, cols - 6)
+    let beach = Math.constrain(BEACH_TILES, 0, cols - 6 - ocean)
+    let data = control.createBuffer(4 + cols * mapRows)
+    data.setNumber(NumberFormat.UInt16LE, 0, cols)
+    data.setNumber(NumberFormat.UInt16LE, 2, mapRows)
+    let walls = image.create(cols, mapRows)
+    let wiggle = 0
+    landRight = WORLD_WIDTH
+    seaLeft = WORLD_WIDTH
+    for (let row = 0; row < mapRows; row++) {
+        if (row < rows) {
+            wiggle = Math.constrain(wiggle + randint(-1, 1), -1, 1)
+        } else {
+            walls.fillRect(0, row, cols, 1, 1)
+        }
+        let waterStart = cols - ocean
+        let sandStart = waterStart - beach
+        if (ocean > 0) {
+            waterStart = Math.constrain(waterStart + wiggle, sandStart + 1, cols)
+        }
+        if (beach > 0) {
+            sandStart = Math.constrain(sandStart + wiggle + randint(-1, 0), 4, waterStart)
+        }
+        landRight = Math.min(landRight, sandStart * 16)
+        seaLeft = Math.min(seaLeft, waterStart * 16)
+        for (let col = 0; col < cols; col++) {
+            let tile = GRASS
+            if (col >= waterStart) {
+                tile = WATER
+            } else if (col >= sandStart) {
+                tile = SAND
+            }
+            data.setUint8(4 + col + row * cols, tile)
+        }
+    }
+    dayMap = tiles.createTilemap(data, walls, [grassTile, sandTile, waterTile, holeTile], TileScale.Sixteen)
+    nightMap = tiles.createTilemap(data, walls, [darker(grassTile), darker(sandTile), darker(waterTile), darker(holeTile)], TileScale.Sixteen)
+    tiles.setCurrentTilemap(dayMap)
+}
+
+// Night colours: each colour swapped for a darker one.
+function darker (tile: Image) {
+    let dark = tile.clone()
+    dark.replace(6, 8)
+    dark.replace(7, 6)
+    dark.replace(8, 12)
+    dark.replace(9, 8)
+    dark.replace(11, 12)
+    dark.replace(13, 11)
+    dark.replace(14, 15)
+    return dark
+}
+
+// Which tile (GRASS, SAND, WATER or HOLE) is under a sprite.
+function tileUnder (who: Sprite) {
+    return game.currentScene().tileMap.getTileIndex(who.x >> 4, who.y >> 4)
+}
+
+// Swimming is slow. Riding is fast (unless your horse is swimming too).
+function setHeroSpeed () {
+    let speed = 100
+    if (ridden != null) {
+        speed = RIDE_SPEED
+    }
+    if (tileUnder(hero) == WATER) {
+        speed = SWIM_SPEED
+    }
+    if (speed != heroSpeed) {
+        heroSpeed = speed
+        controller.moveSprite(hero, speed, speed)
+    }
+}
+
+// Dig the sand you are standing on. Needs a shovel.
+function dig () {
+    let col = hero.x >> 4
+    let row = hero.y >> 4
+    if (tileUnder(hero) != SAND) {
+        return false
+    }
+    if (!(hasShovel)) {
+        hero.sayText("I need a shovel", 800, false)
+        return true
+    }
+    if (col != digCol || row != digRow) {
+        digCol = col
+        digRow = row
+        digsSoFar = 0
+    }
+    digsSoFar += 1
+    if (digsSoFar >= SAND_DIGS) {
+        game.currentScene().tileMap.setTileAt(col, row, HOLE)
+        sand += 1
+        digCol = -1
+        digsSoFar = 0
+        hero.sayText("+1 sand", 600, false)
+        updateHud()
+    }
+    return true
+}
+
+// Every morning the holes fill back in.
+function fillHoles () {
+    let map = game.currentScene().tileMap
+    for (let col = 0; col < map.areaWidth() >> 4; col++) {
+        for (let row = 0; row < map.areaHeight() >> 4; row++) {
+            if (map.getTileIndex(col, row) == HOLE) {
+                map.setTileAt(col, row, SAND)
+            }
+        }
+    }
+}
+
+// Blocks and grass only go on grass.
 function randomSpotX () {
-    return randint(10, WORLD_WIDTH - 10)
+    return randint(10, Math.max(10, landRight - 10))
 }
 
 function randomSpotY () {
@@ -91,14 +308,19 @@ function cameraY () {
     return Math.constrain(hero.y, 60, WORLD_HEIGHT - 60 + 28)
 }
 
-// Animals walk anywhere in the world, and turn around at its edge.
+// Animals walk anywhere on land (the beach too), and turn around at the
+// world's edge and at the water.
 function keepInWorld (kind: number) {
     for (let critter of sprites.allOfKind(kind)) {
+        if (critter == ridden) {
+            // A horse you are riding goes where you go, even into the sea.
+            continue
+        }
         if (critter.x < 8) {
             critter.x = 8
             critter.vx = Math.abs(critter.vx)
-        } else if (critter.x > WORLD_WIDTH - 8) {
-            critter.x = WORLD_WIDTH - 8
+        } else if (critter.x > seaLeft - 8) {
+            critter.x = seaLeft - 8
             critter.vx = 0 - Math.abs(critter.vx)
         }
         if (critter.y < 8) {
@@ -118,6 +340,7 @@ game.onUpdate(function () {
     hero.x = Math.constrain(hero.x, 8, WORLD_WIDTH - 8)
     hero.y = Math.constrain(hero.y, 8, WORLD_HEIGHT - 8)
     scene.centerCameraAt(cameraX(), cameraY())
+    setHeroSpeed()
     if (ridden != null) {
         ridden.setPosition(hero.x, hero.y + 4)
         ridden.vx = 0
@@ -472,7 +695,7 @@ function spawnMob () {
         mobX = randint(cameraX() - 70, cameraX() + 70)
         mobY = cameraY() + 50
     }
-    mob.setPosition(Math.constrain(mobX, 0, WORLD_WIDTH), Math.constrain(mobY, 0, WORLD_HEIGHT))
+    mob.setPosition(Math.constrain(mobX, 8, WORLD_WIDTH - 8), Math.constrain(mobY, 8, WORLD_HEIGHT - 8))
 }
 
 function isMob (thing: Sprite) {
@@ -605,7 +828,7 @@ game.onUpdateInterval(2000, function () {
 function startNight () {
     isNight = true
     secondsLeft = NIGHT_SECONDS
-    scene.setBackgroundColor(12)
+    tiles.setCurrentTilemap(nightMap)
     game.splash("NIGHT " + day, "The mobs are coming!")
     updateHud()
 }
@@ -615,7 +838,8 @@ function startDay () {
     secondsLeft = DAY_SECONDS
     clearMobs()
     day += 1
-    scene.setBackgroundColor(7)
+    tiles.setCurrentTilemap(dayMap)
+    fillHoles()
     game.splash("Good morning!", "Day " + day)
     updateHud()
 }
@@ -664,13 +888,16 @@ function collect (block: Sprite) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
         wool += 1
+        hero.sayText("+1 wool", 600, false)
     } else if (block.kind() == SpriteKind.Horse) {
         leather += 1
+        hero.sayText("+1 leather", 600, false)
         armoredHorses.removeElement(block)
         woundedHorses.removeElement(block)
     } else if (block.kind() == SpriteKind.Cow) {
         food += 1
         leather += 1
+        hero.sayText("+1 food +1 leather", 600, false)
     } else if (isAnimal(block)) {
         food += 1
     } else if (block.kind() == SpriteKind.Tree) {
@@ -796,6 +1023,8 @@ controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
     findTarget()
     if (target != null) {
         punch(target)
+    } else {
+        dig()
     }
 })
 
@@ -876,13 +1105,13 @@ function getOnHorse () {
     } else {
         horseHearts = 1
     }
-    controller.moveSprite(hero, RIDE_SPEED, RIDE_SPEED)
+    setHeroSpeed()
     hero.sayText("Giddy up!", 800, false)
 }
 
 function getOffHorse () {
     ridden = null
-    controller.moveSprite(hero)
+    setHeroSpeed()
 }
 
 controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
@@ -964,6 +1193,9 @@ function recipeList () {
     } else if (!(hasIronPickaxe)) {
         list.push("Iron pickaxe")
     }
+    if (!(hasShovel)) {
+        list.push("Shovel")
+    }
     if (!(hasArmor)) {
         list.push("Armor")
     }
@@ -985,6 +1217,8 @@ function recipeCost (name: string) {
         return "2 wood + 3 stone"
     } else if (name == "Iron pickaxe") {
         return "3 iron + 2 wood"
+    } else if (name == "Shovel") {
+        return "1 stone + 2 wood"
     } else if (name == "Armor") {
         return "5 iron"
     } else if (name == "Saddle") {
@@ -1006,6 +1240,8 @@ function canCraft (name: string) {
         return wood >= 2 && stone >= 3
     } else if (name == "Iron pickaxe") {
         return iron >= 3 && wood >= 2
+    } else if (name == "Shovel") {
+        return stone >= 1 && wood >= 2
     } else if (name == "Armor") {
         return iron >= 5
     } else if (name == "Saddle") {
@@ -1036,6 +1272,11 @@ function craft (name: string) {
         wood += -2
         hasIronPickaxe = true
         craftMessage = "Now I can mine gold!"
+    } else if (name == "Shovel") {
+        stone += -1
+        wood += -2
+        hasShovel = true
+        craftMessage = "Stand on sand, press A to dig"
     } else if (name == "Armor") {
         iron += -5
         hasArmor = true
@@ -1236,7 +1477,7 @@ function drawMenu () {
     pic.fill(15)
     pic.print("CRAFTING", 56, 2, 5)
     pic.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 12, 1)
-    pic.print("Gold" + gold + " Wool" + wool + " Lthr" + leather, 2, 21, 1)
+    pic.print("Gold" + gold + " Wool" + wool + " Lthr" + leather + " Sand" + sand, 2, 21, 1)
     pic.drawLine(0, 31, 159, 31, 11)
     for (let row = 0; row < 6; row++) {
         let n = menuTop + row
@@ -1271,7 +1512,7 @@ function drawMenu () {
 function updateHud () {
     hud.image.fill(15)
     hud.image.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 1, 1)
-    hud.image.print("Gold" + gold + " Food" + food + " Wool" + wool + " Lthr" + leather, 2, 10, 1)
+    hud.image.print("Gold" + gold + " Food" + food + " Sand" + sand, 2, 10, 1)
     if (isNight) {
         hud.image.print("NIGHT " + day + "  " + secondsLeft + "s left", 2, 19, 2)
     } else {
@@ -1295,6 +1536,7 @@ function startTheGame () {
     }
     gameStarted = true
     secondsLeft = DAY_SECONDS
+    buildWorld()
     hero = sprites.create(img`
         . . . . e e e e e e e e . . . .
         . . . . e e e e e e e e . . . .
@@ -1313,10 +1555,10 @@ function startTheGame () {
         . . . . 8 8 8 . . 8 8 8 . . . .
         . . . . e e e . . e e e . . . .
         `, SpriteKind.Player)
-    hero.setPosition(WORLD_WIDTH / 2, WORLD_HEIGHT / 2)
+    hero.setPosition(Math.min(WORLD_WIDTH / 2, landRight - 16), WORLD_HEIGHT / 2)
     info.setLife(START_HEARTS)
     hero.z = 10
-    controller.moveSprite(hero)
+    setHeroSpeed()
     scene.setBackgroundColor(7)
 
     hud = sprites.create(image.create(160, 28), SpriteKind.Hud)
