@@ -189,15 +189,18 @@ function buildWorld () {
         if (row < rows) {
             wiggle = Math.constrain(wiggle + randint(-1, 1), -1, 1)
         } else {
-            walls.fillRect(0, row, cols, 1, 1)
+            // 2 is the number the tilemap uses for "wall".
+            walls.fillRect(0, row, cols, 1, 2)
         }
-        let waterStart = cols - ocean
-        let sandStart = waterStart - beach
+        // The sea keeps at least one tile of water on every row, and the
+        // beach at least one tile of sand, however the shore wiggles.
+        let waterStart = cols
         if (ocean > 0) {
-            waterStart = Math.constrain(waterStart + wiggle, sandStart + 1, cols)
+            waterStart = Math.constrain(cols - ocean + wiggle, 4, cols - 1)
         }
+        let sandStart = waterStart
         if (beach > 0) {
-            sandStart = Math.constrain(sandStart + wiggle + randint(-1, 0), 4, waterStart)
+            sandStart = Math.constrain(waterStart - beach + randint(-1, 0), 4, waterStart - 1)
         }
         landRight = Math.min(landRight, sandStart * 16)
         seaLeft = Math.min(seaLeft, waterStart * 16)
