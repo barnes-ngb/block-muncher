@@ -1,4 +1,12 @@
-// BLOCK MUNCHER v4: DAY AND NIGHT, IN A BIG WORLD
+// BLOCK MUNCHER v5: HORSES, GOLD AND APPLES
+// v5 ideas from Lincoln's notes:
+//   Horses drop leather, and so do cows (cows still drop food too).
+//   3 leather + 1 iron makes a saddle. Ride a horse to go faster; B gets off.
+//   7 iron makes horse armor. B puts it on. A horse has 1 life, 2 with armor.
+//   Trees sometimes drop an apple. An apple gives you a heart.
+//   From day 2 you find gold, but you need an iron pickaxe (3 iron + 2 wood).
+//
+// v4: DAY AND NIGHT, IN A BIG WORLD
 // Designed by Lincoln and London:
 //   "One minute in the morning, then it's night time, and there will be
 //    monsters: zombies and spiders and creepers and a skeleton. When the
@@ -44,6 +52,8 @@ namespace SpriteKind {
     export const Cow = SpriteKind.create()
     export const Sheep = SpriteKind.create()
     export const Chicken = SpriteKind.create()
+    export const Horse = SpriteKind.create()
+    export const Gold = SpriteKind.create()
     export const Bed = SpriteKind.create()
     export const Zombie = SpriteKind.create()
     export const Spider = SpriteKind.create()
@@ -69,6 +79,11 @@ let ANIMAL_HITS = 2
 let MAX_ANIMALS = 8
 let ANIMAL_SPEED = 20
 let ANIMAL_RESPAWN_MS = 10000
+let RIDE_SPEED = 160
+let APPLE_CHANCE = 20
+let GOLD_FROM_DAY = 2
+let GOLD_CHANCE = 15
+let GOLD_HITS = 6
 let DAY_SECONDS = 60
 let NIGHT_SECONDS = 120
 let START_HEARTS = 5
@@ -91,6 +106,11 @@ let iron = 0
 let boxes = 0
 let food = 0
 let wool = 0
+let leather = 0
+let gold = 0
+let hasIronPickaxe = false
+let hasSaddle = false
+let horseArmors = 0
 let day = 1
 let hasBed = false
 
@@ -98,6 +118,12 @@ let hasBed = false
 let isNight = false
 let secondsLeft = DAY_SECONDS
 let lastHurt = 0
+
+// ===== HORSE RIDING =====
+let ridden: Sprite = null
+let armoredHorse: Sprite = null
+let horseNearby: Sprite = null
+let horseHearts = 0
 let hasTable = false
 let hasPickaxe = false
 let hasArmor = false
@@ -122,8 +148,8 @@ function cameraX () {
 }
 
 function cameraY () {
-    // +18 so the bottom of the world can scroll up above the text bar
-    return Math.constrain(hero.y, 60, WORLD_HEIGHT - 60 + 18)
+    // +28 so the bottom of the world can scroll up above the text bar
+    return Math.constrain(hero.y, 60, WORLD_HEIGHT - 60 + 28)
 }
 
 // Animals walk anywhere in the world, and turn around at its edge.
@@ -150,10 +176,16 @@ game.onUpdate(function () {
     hero.x = Math.constrain(hero.x, 8, WORLD_WIDTH - 8)
     hero.y = Math.constrain(hero.y, 8, WORLD_HEIGHT - 8)
     scene.centerCameraAt(cameraX(), cameraY())
+    if (ridden != null) {
+        ridden.setPosition(hero.x, hero.y + 4)
+        ridden.vx = 0
+        ridden.vy = 0
+    }
     keepInWorld(SpriteKind.Pig)
     keepInWorld(SpriteKind.Cow)
     keepInWorld(SpriteKind.Sheep)
     keepInWorld(SpriteKind.Chicken)
+    keepInWorld(SpriteKind.Horse)
 })
 
 // Little grass tufts and flowers, so you can see yourself moving.
@@ -192,7 +224,26 @@ function plantGrass () {
 function spawnBlock () {
     let roll = randint(1, 10)
     let block: Sprite = null
-    if (roll <= 5) {
+    if (day >= GOLD_FROM_DAY && Math.percentChance(GOLD_CHANCE)) {
+        block = sprites.create(img`
+            . . . . . . . . . . . . . . . .
+            . . . . . b b b b b b . . . . .
+            . . . b b b 5 5 b b b b b . . .
+            . . b b b 5 4 b b b d b b b . .
+            . b b d b b b b b 5 5 b b b b .
+            . b b b b b b b 5 4 b b b c b .
+            . b c b b 5 5 b b b b b b b b .
+            b b b b 5 4 b b b d b b 5 5 b b
+            b b d b b b b b b b b 5 4 b b b
+            b b b b b b 5 5 b b b b b b c b
+            b b b c b 5 4 b b b b d b b b b
+            . b b b b b b b b 5 5 b b b b .
+            . b b d b b b b 5 4 b b b b b .
+            . . b b b b c b b b b b d b . .
+            . . . c c c c c c c c c c . . .
+            . . . . . . . . . . . . . . . .
+            `, SpriteKind.Gold)
+    } else if (roll <= 5) {
         block = sprites.create(img`
             . . . . . 7 7 7 7 7 7 . . . . .
             . . . 7 7 7 7 6 7 7 7 7 7 . . .
@@ -255,7 +306,7 @@ function spawnBlock () {
 
 // ===== ANIMALS =====
 function spawnAnimal () {
-    let roll = randint(1, 4)
+    let roll = randint(1, 5)
     let animal: Sprite = null
     if (roll == 1) {
         animal = sprites.create(img`
@@ -314,6 +365,25 @@ function spawnAnimal () {
             . . . . . . . . . . . . . . . .
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Sheep)
+    } else if (roll == 5) {
+        animal = sprites.create(img`
+            . . . . . . . . . . . . . . . .
+            . . . . . . . . . . . f f . . .
+            . . . . . . . . . . f e e e . .
+            . . . . . . . . . f e e f e . .
+            . . . . . . . . f e e e e e e .
+            . . . . . . . . f e e e . e e .
+            . . e e e e e e e e e e . . . .
+            . e e e e e e e e e e e . . . .
+            . e e e e e e e e e e e . . . .
+            . f e e e e e e e e e . . . . .
+            . f . e e . . . . e e . . . . .
+            . . . e e . . . . e e . . . . .
+            . . . e e . . . . e e . . . . .
+            . . . f f . . . . f f . . . . .
+            . . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . . .
+            `, SpriteKind.Horse)
     } else {
         animal = sprites.create(img`
             . . . . . . . . . . . . . . . .
@@ -339,7 +409,9 @@ function spawnAnimal () {
 
 function wanderAll (kind: number) {
     for (let critter of sprites.allOfKind(kind)) {
-        if (Math.percentChance(40)) {
+        if (critter == ridden) {
+            // the horse you ride goes where you go
+        } else if (Math.percentChance(40)) {
             critter.vx = 0
             critter.vy = 0
         } else {
@@ -350,11 +422,11 @@ function wanderAll (kind: number) {
 }
 
 function isAnimal (thing: Sprite) {
-    return thing.kind() == SpriteKind.Pig || thing.kind() == SpriteKind.Cow || thing.kind() == SpriteKind.Sheep || thing.kind() == SpriteKind.Chicken
+    return thing.kind() == SpriteKind.Pig || thing.kind() == SpriteKind.Cow || thing.kind() == SpriteKind.Sheep || thing.kind() == SpriteKind.Chicken || thing.kind() == SpriteKind.Horse
 }
 
 function animalCount () {
-    return sprites.allOfKind(SpriteKind.Pig).length + sprites.allOfKind(SpriteKind.Cow).length + sprites.allOfKind(SpriteKind.Sheep).length + sprites.allOfKind(SpriteKind.Chicken).length
+    return sprites.allOfKind(SpriteKind.Pig).length + sprites.allOfKind(SpriteKind.Cow).length + sprites.allOfKind(SpriteKind.Sheep).length + sprites.allOfKind(SpriteKind.Chicken).length + sprites.allOfKind(SpriteKind.Horse).length
 }
 
 // ===== MOBS (they only come at night) =====
@@ -490,7 +562,21 @@ function clearMobs () {
 // ===== GETTING HURT =====
 // You cannot be hurt twice in one second, so one touch is one hit.
 function hurt (amount: number) {
-    if (game.runtime() - lastHurt > HURT_COOLDOWN_MS) {
+    if (game.runtime() - lastHurt > HURT_COOLDOWN_MS && ridden != null) {
+        // Riding: your horse takes the hit instead of you.
+        lastHurt = game.runtime()
+        horseHearts += -1
+        scene.cameraShake(4, 200)
+        if (horseHearts <= 0) {
+            let lostHorse = ridden
+            getOffHorse()
+            if (lostHorse == armoredHorse) {
+                armoredHorse = null
+            }
+            lostHorse.destroy(effects.spray, 300)
+            hero.sayText("My horse!", 1000, false)
+        }
+    } else if (game.runtime() - lastHurt > HURT_COOLDOWN_MS) {
         lastHurt = game.runtime()
         let damage = amount
         if (hasArmor) {
@@ -624,8 +710,10 @@ function hitsNeeded (block: Sprite) {
         needed = STONE_HITS
     } else if (block.kind() == SpriteKind.Iron) {
         needed = IRON_HITS
+    } else if (block.kind() == SpriteKind.Gold) {
+        needed = GOLD_HITS
     }
-    if (hasPickaxe && (block.kind() == SpriteKind.Stone || block.kind() == SpriteKind.Iron)) {
+    if (hasPickaxe && (block.kind() == SpriteKind.Stone || block.kind() == SpriteKind.Iron || block.kind() == SpriteKind.Gold)) {
         needed = Math.ceil(needed / PICKAXE_POWER)
     }
     return needed
@@ -636,12 +724,23 @@ function collect (block: Sprite) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
         wool += 1
+    } else if (block.kind() == SpriteKind.Horse) {
+        leather += 1
+    } else if (block.kind() == SpriteKind.Cow) {
+        food += 1
+        leather += 1
     } else if (isAnimal(block)) {
         food += 1
     } else if (block.kind() == SpriteKind.Tree) {
         wood += 1
+        if (Math.percentChance(APPLE_CHANCE)) {
+            food += 1
+            hero.sayText("An apple!", 800, false)
+        }
     } else if (block.kind() == SpriteKind.Stone) {
         stone += 1
+    } else if (block.kind() == SpriteKind.Gold) {
+        gold += 1
     } else {
         iron += 1
     }
@@ -655,6 +754,8 @@ function collect (block: Sprite) {
 function punch (block: Sprite) {
     if (block.kind() == SpriteKind.Iron && !(hasPickaxe)) {
         hero.sayText("Need a pickaxe!", 1000, false)
+    } else if (block.kind() == SpriteKind.Gold && !(hasIronPickaxe)) {
+        hero.sayText("Need an iron pickaxe!", 1000, false)
     } else {
         if (block != lastTarget) {
             lastTarget = block
@@ -694,6 +795,11 @@ function findTarget () {
             target = ore
         }
     }
+    for (let goldOre of sprites.allOfKind(SpriteKind.Gold)) {
+        if (hero.overlapsWith(goldOre)) {
+            target = goldOre
+        }
+    }
     for (let pig of sprites.allOfKind(SpriteKind.Pig)) {
         if (hero.overlapsWith(pig)) {
             target = pig
@@ -712,6 +818,11 @@ function findTarget () {
     for (let chicken of sprites.allOfKind(SpriteKind.Chicken)) {
         if (hero.overlapsWith(chicken)) {
             target = chicken
+        }
+    }
+    for (let horse of sprites.allOfKind(SpriteKind.Horse)) {
+        if (horse != ridden && hero.overlapsWith(horse)) {
+            target = horse
         }
     }
     for (let zombie of sprites.allOfKind(SpriteKind.Zombie)) {
@@ -744,7 +855,7 @@ controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
 })
 
 function blockCount () {
-    return sprites.allOfKind(SpriteKind.Tree).length + sprites.allOfKind(SpriteKind.Stone).length + sprites.allOfKind(SpriteKind.Iron).length
+    return sprites.allOfKind(SpriteKind.Tree).length + sprites.allOfKind(SpriteKind.Stone).length + sprites.allOfKind(SpriteKind.Iron).length + sprites.allOfKind(SpriteKind.Gold).length
 }
 
 // ===== SLEEPING =====
@@ -799,13 +910,69 @@ function placeBeside (thing: Sprite) {
     }
 }
 
+// ===== GETTING ON AND OFF A HORSE =====
+function findHorse () {
+    horseNearby = null
+    for (let horse of sprites.allOfKind(SpriteKind.Horse)) {
+        if (inReach(horse)) {
+            horseNearby = horse
+        }
+    }
+    return horseNearby != null
+}
+
+function getOnHorse () {
+    ridden = horseNearby
+    ridden.z = 5
+    if (ridden == armoredHorse) {
+        horseHearts = 2
+    } else {
+        horseHearts = 1
+    }
+    controller.moveSprite(hero, RIDE_SPEED, RIDE_SPEED)
+    hero.sayText("Giddy up!", 800, false)
+}
+
+function getOffHorse () {
+    ridden = null
+    controller.moveSprite(hero)
+}
+
 controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
-    if (onBed() && !(isNight)) {
+    if (ridden != null) {
+        if (horseArmors > 0 && ridden != armoredHorse && game.ask("Put ARMOR on your horse?", "horse gets 2 hearts")) {
+            horseArmors += -1
+            armoredHorse = ridden
+            horseHearts = 2
+            ridden.setImage(img`
+            . . . . . . . . . . . . . . . .
+            . . . . . . . . . . . f f . . .
+            . . . . . . . . . . f b b b . .
+            . . . . . . . . . f b b f b . .
+            . . . . . . . . f b b b b e e .
+            . . . . . . . . f e e e . e e .
+            . . e e b b b b b b e e . . . .
+            . e e b 1 1 1 1 1 1 b e . . . .
+            . e e b b b b b b b b e . . . .
+            . f e e e e e e e e e . . . . .
+            . f . e e . . . . e e . . . . .
+            . . . e e . . . . e e . . . . .
+            . . . e e . . . . e e . . . . .
+            . . . f f . . . . f f . . . . .
+            . . . . . . . . . . . . . . . .
+            . . . . . . . . . . . . . . . .
+            `)
+        } else if (game.ask("Get off the horse?", "B = stay on")) {
+            getOffHorse()
+        }
+    } else if (onBed() && !(isNight)) {
         game.splash("You can only sleep", "at night")
     } else if (onBed()) {
         if (game.ask("Go to sleep?", "skip to morning")) {
             goToSleep()
         }
+    } else if (hasSaddle && findHorse() && game.ask("Ride the horse?", "B on the horse to get off")) {
+        getOnHorse()
     } else if (food > 0 && info.life() < START_HEARTS && game.ask("Eat food?", "+1 heart")) {
         food += -1
         info.changeLifeBy(1)
@@ -902,6 +1069,32 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
                     `)
             }
         }
+        if (hasPickaxe && !(hasIronPickaxe) && iron >= 3 && wood >= 2) {
+            offered = true
+            if (game.ask("Craft an IRON PICKAXE?", "3 iron + 2 wood")) {
+                iron += -3
+                wood += -2
+                hasIronPickaxe = true
+                hero.sayText("Now I can mine gold!", 2000, false)
+            }
+        }
+        if (!(hasSaddle) && leather >= 3 && iron >= 1) {
+            offered = true
+            if (game.ask("Craft a SADDLE?", "3 leather + 1 iron")) {
+                leather += -3
+                iron += -1
+                hasSaddle = true
+                hero.sayText("Walk up to a horse, press B", 2000, false)
+            }
+        }
+        if (iron >= 7) {
+            offered = true
+            if (game.ask("Craft HORSE ARMOR?", "costs 7 iron")) {
+                iron += -7
+                horseArmors += 1
+                hero.sayText("Ride a horse, press B to put it on", 2000, false)
+            }
+        }
         if (!(hasBed) && wool >= 3 && wood >= 3) {
             offered = true
             if (game.ask("Craft a BED?", "3 wool + 3 wood")) {
@@ -931,7 +1124,7 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
             }
         }
         if (!(offered)) {
-            game.splash("Nothing to craft yet", "Pick 2W+3S Box 8W Armor 5Iron Bed 3Wool+3W")
+            game.splash("Nothing to craft yet", "Collect more, then come back")
         }
     }
     updateHud()
@@ -941,11 +1134,12 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
 // ===== SCREEN TEXT =====
 function updateHud () {
     hud.image.fill(15)
-    hud.image.print("W" + wood + " S" + stone + " I" + iron + " Food" + food + " Wool" + wool, 2, 1, 1)
+    hud.image.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 1, 1)
+    hud.image.print("Gold" + gold + " Food" + food + " Wool" + wool + " Lthr" + leather, 2, 10, 1)
     if (isNight) {
-        hud.image.print("NIGHT " + day + "  " + secondsLeft + "s left", 2, 10, 2)
+        hud.image.print("NIGHT " + day + "  " + secondsLeft + "s left", 2, 19, 2)
     } else {
-        hud.image.print("DAY " + day + "  " + secondsLeft + "s until night", 2, 10, 5)
+        hud.image.print("DAY " + day + "  " + secondsLeft + "s until night", 2, 19, 5)
     }
 }
 
@@ -980,9 +1174,9 @@ hero.z = 10
 controller.moveSprite(hero)
 scene.setBackgroundColor(7)
 
-let hud = sprites.create(image.create(160, 18), SpriteKind.Hud)
+let hud = sprites.create(image.create(160, 28), SpriteKind.Hud)
 hud.left = 0
-hud.top = 102
+hud.top = 92
 hud.z = 100
 hud.setFlag(SpriteFlag.RelativeToCamera, true)
 updateHud()
@@ -1002,6 +1196,7 @@ game.onUpdateInterval(1500, function () {
     wanderAll(SpriteKind.Cow)
     wanderAll(SpriteKind.Sheep)
     wanderAll(SpriteKind.Chicken)
+    wanderAll(SpriteKind.Horse)
 })
 
 game.onUpdateInterval(RESPAWN_MS, function () {
