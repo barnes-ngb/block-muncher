@@ -787,8 +787,14 @@ function hurt (amount: number) {
                 // Gold armor blocks 3 hits out of 4.
                 blockChance = 75
             }
+            // Armor takes 1 off a big hit (a creeper).
             if (damage > 1) {
                 damage = damage - 1
+                if (hasGoldArmor && Math.percentChance(blockChance)) {
+                    // Gold armor can block what's left, too.
+                    damage = 0
+                    hero.sayText("Blocked!", 500, false)
+                }
             } else if (Math.percentChance(blockChance)) {
                 damage = 0
                 hero.sayText("Blocked!", 500, false)
