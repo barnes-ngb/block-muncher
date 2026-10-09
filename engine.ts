@@ -927,160 +927,345 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
     } else if (food > 0 && info.life() < START_HEARTS && game.ask("Eat food?", "+1 heart")) {
         food += -1
         info.changeLifeBy(1)
-    } else if (!(hasTable)) {
-        if (wood >= 4) {
-            if (game.ask("Craft a TABLE?", "costs 4 wood")) {
-                wood += -4
-                hasTable = true
-                let table = sprites.create(img`
-                    e e e e e e e e e e e e e e e e
-                    e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
-                    e 4 b b 4 4 4 e e 4 4 b b 4 4 e
-                    e 4 b b 4 4 4 e e 4 4 b b 4 4 e
-                    e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
-                    e e e e e e e e e e e e e e e e
-                    e e e e e e e e e e e e e e e e
-                    e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
-                    e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
-                    e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
-                    e e e e e e e e e e e e e e e e
-                    . e e . . . . . . . . . . e e .
-                    . e e . . . . . . . . . . e e .
-                    . e e . . . . . . . . . . e e .
-                    . e e . . . . . . . . . . e e .
-                    . e e . . . . . . . . . . e e .
-                    `, SpriteKind.Table)
-                placeBeside(table)
-                hero.sayText("Now stand at it and press B", 2000, false)
-            }
-        } else {
-            game.splash("A table needs 4 wood", "You have " + wood)
-        }
-    } else if (!(nearTable())) {
-        game.splash("Go stand at your table", "then press B to craft")
+    } else if (!(hasTable) || nearTable()) {
+        // The menu updates the screen itself when it closes.
+        openCraftMenu()
+        return
     } else {
-        let offered = false
-        if (!(hasPickaxe) && wood >= 2 && stone >= 3) {
-            offered = true
-            if (game.ask("Craft a PICKAXE?", "2 wood + 3 stone")) {
-                wood += -2
-                stone += -3
-                hasPickaxe = true
-                hero.sayText("Now I can mine iron!", 2000, false)
-            }
-        }
-        if (wood >= 8) {
-            offered = true
-            if (game.ask("Craft a BOX?", "costs 8 wood")) {
-                wood += -8
-                boxes += 1
-                let box = sprites.create(img`
-                    . e e e e e e e e e e e e e e .
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e 4 e e e e e e e e e e e e 4 e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e e e e e e e 5 5 e e e e e e e
-                    e e e e e e e 5 5 e e e e e e e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e 4 e e e e e e e e e e e e 4 e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e 4 e e e e e e e e e e e e 4 e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e 4 e e e e e e e e e e e e 4 e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    . e e e e e e e e e e e e e e .
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    `, SpriteKind.Box)
-                placeBeside(box)
-            }
-        }
-        if (!(hasArmor) && iron >= 5) {
-            offered = true
-            if (game.ask("Craft ARMOR?", "costs 5 iron")) {
-                iron += -5
-                hasArmor = true
-                hero.setImage(img`
-                    . . . . b b b b b b b b . . . .
-                    . . . . b 1 1 1 1 1 1 b . . . .
-                    . . . . b d d d d d d b . . . .
-                    . . . . d d d d d d d d . . . .
-                    . . . . d f 1 d d 1 f d . . . .
-                    . . . . d d d d d d d d . . . .
-                    . . . . d d d 3 3 d d d . . . .
-                    . . . . d d d d d d d d . . . .
-                    . . b b b b b b b b b b b b . .
-                    . . b 1 1 1 1 1 1 1 1 1 1 b . .
-                    . . d d b 1 1 1 1 1 1 b d d . .
-                    . . d d b b b b b b b b d d . .
-                    . . . . b 1 1 1 1 1 1 b . . . .
-                    . . . . b 1 1 . . 1 1 b . . . .
-                    . . . . b b b . . b b b . . . .
-                    . . . . e e e . . e e e . . . .
-                    `)
-            }
-        }
-        if (hasPickaxe && !(hasIronPickaxe) && iron >= 3 && wood >= 2) {
-            offered = true
-            if (game.ask("Craft an IRON PICKAXE?", "3 iron + 2 wood")) {
-                iron += -3
-                wood += -2
-                hasIronPickaxe = true
-                hero.sayText("Now I can mine gold!", 2000, false)
-            }
-        }
-        if (!(hasSaddle) && leather >= 3 && iron >= 1) {
-            offered = true
-            if (game.ask("Craft a SADDLE?", "3 leather + 1 iron")) {
-                leather += -3
-                iron += -1
-                hasSaddle = true
-                hero.sayText("Walk up to a horse, press B", 2000, false)
-            }
-        }
-        if (iron >= 7) {
-            offered = true
-            if (game.ask("Craft HORSE ARMOR?", "costs 7 iron")) {
-                iron += -7
-                horseArmors += 1
-                hero.sayText("Ride a horse, press B to put it on", 2000, false)
-            }
-        }
-        if (!(hasBed) && wool >= 3 && wood >= 3) {
-            offered = true
-            if (game.ask("Craft a BED?", "3 wool + 3 wood")) {
-                wool += -3
-                wood += -3
-                hasBed = true
-                let bed = sprites.create(img`
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
-                    1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
-                    1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
-                    1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
-                    e e e e e e e e e e e e e e e e
-                    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
-                    e e e e e e e e e e e e e e e e
-                    e e . . . . . . . . . . . . e e
-                    e e . . . . . . . . . . . . e e
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    . . . . . . . . . . . . . . . .
-                    `, SpriteKind.Bed)
-                placeBeside(bed)
-                hero.sayText("Stand on the bed, press B to sleep", 2000, false)
-            }
-        }
-        if (!(offered)) {
-            game.splash("Nothing to craft yet", "Collect more, then come back")
-        }
+        game.splash("Go stand at your table", "then press B to craft")
     }
     updateHud()
     checkWin()
 })
+
+// ===== THE CRAFTING MENU =====
+// B opens it (anywhere for the first table, at your table after that).
+// Up and down pick a recipe, A makes it, B closes the menu.
+// The game is paused while the menu is open.
+// To add a recipe: add its name to recipeList, its cost to recipeCost,
+// what it needs to canCraft, and what it does to craft.
+let menuOpen = false
+let menuScreen: Sprite = null
+let menuItems: string[] = []
+let menuPick = 0
+let menuTop = 0
+let menuNote = ""
+let toPlace: string[] = []
+let craftMessage = ""
+
+function recipeList () {
+    let list: string[] = []
+    if (!(hasTable)) {
+        list.push("Table")
+        return list
+    }
+    if (!(hasPickaxe)) {
+        list.push("Pickaxe")
+    } else if (!(hasIronPickaxe)) {
+        list.push("Iron pickaxe")
+    }
+    if (!(hasArmor)) {
+        list.push("Armor")
+    }
+    if (!(hasSaddle)) {
+        list.push("Saddle")
+    }
+    list.push("Horse armor")
+    list.push("Box")
+    if (!(hasBed)) {
+        list.push("Bed")
+    }
+    return list
+}
+
+function recipeCost (name: string) {
+    if (name == "Table") {
+        return "4 wood"
+    } else if (name == "Pickaxe") {
+        return "2 wood + 3 stone"
+    } else if (name == "Iron pickaxe") {
+        return "3 iron + 2 wood"
+    } else if (name == "Armor") {
+        return "5 iron"
+    } else if (name == "Saddle") {
+        return "3 leather + 1 iron"
+    } else if (name == "Horse armor") {
+        return "7 iron"
+    } else if (name == "Box") {
+        return "8 wood"
+    } else if (name == "Bed") {
+        return "3 wool + 3 wood"
+    }
+    return ""
+}
+
+function canCraft (name: string) {
+    if (name == "Table") {
+        return wood >= 4
+    } else if (name == "Pickaxe") {
+        return wood >= 2 && stone >= 3
+    } else if (name == "Iron pickaxe") {
+        return iron >= 3 && wood >= 2
+    } else if (name == "Armor") {
+        return iron >= 5
+    } else if (name == "Saddle") {
+        return leather >= 3 && iron >= 1
+    } else if (name == "Horse armor") {
+        return iron >= 7
+    } else if (name == "Box") {
+        return wood >= 8
+    } else if (name == "Bed") {
+        return wool >= 3 && wood >= 3
+    }
+    return false
+}
+
+function craft (name: string) {
+    if (name == "Table") {
+        wood += -4
+        hasTable = true
+        toPlace.push("Table")
+        craftMessage = "Now stand at it and press B"
+    } else if (name == "Pickaxe") {
+        wood += -2
+        stone += -3
+        hasPickaxe = true
+        craftMessage = "Now I can mine iron!"
+    } else if (name == "Iron pickaxe") {
+        iron += -3
+        wood += -2
+        hasIronPickaxe = true
+        craftMessage = "Now I can mine gold!"
+    } else if (name == "Armor") {
+        iron += -5
+        hasArmor = true
+        hero.setImage(img`
+            . . . . b b b b b b b b . . . .
+            . . . . b 1 1 1 1 1 1 b . . . .
+            . . . . b d d d d d d b . . . .
+            . . . . d d d d d d d d . . . .
+            . . . . d f 1 d d 1 f d . . . .
+            . . . . d d d d d d d d . . . .
+            . . . . d d d 3 3 d d d . . . .
+            . . . . d d d d d d d d . . . .
+            . . b b b b b b b b b b b b . .
+            . . b 1 1 1 1 1 1 1 1 1 1 b . .
+            . . d d b 1 1 1 1 1 1 b d d . .
+            . . d d b b b b b b b b d d . .
+            . . . . b 1 1 1 1 1 1 b . . . .
+            . . . . b 1 1 . . 1 1 b . . . .
+            . . . . b b b . . b b b . . . .
+            . . . . e e e . . e e e . . . .
+            `)
+    } else if (name == "Saddle") {
+        leather += -3
+        iron += -1
+        hasSaddle = true
+        craftMessage = "Walk up to a horse, press B"
+    } else if (name == "Horse armor") {
+        iron += -7
+        horseArmors += 1
+        craftMessage = "Ride a horse, press B to put it on"
+    } else if (name == "Box") {
+        wood += -8
+        boxes += 1
+        toPlace.push("Box")
+    } else if (name == "Bed") {
+        wool += -3
+        wood += -3
+        hasBed = true
+        toPlace.push("Bed")
+        craftMessage = "Stand on the bed, press B to sleep"
+    }
+}
+
+// Tables, boxes and beds appear in the world after the menu closes,
+// one beside the next so they don't pile up.
+function placeCrafted () {
+    let offset = 0
+    for (let name of toPlace) {
+        let thing: Sprite = null
+        if (name == "Table") {
+            thing = sprites.create(img`
+                e e e e e e e e e e e e e e e e
+                e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
+                e 4 b b 4 4 4 e e 4 4 b b 4 4 e
+                e 4 b b 4 4 4 e e 4 4 b b 4 4 e
+                e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
+                e e e e e e e e e e e e e e e e
+                e e e e e e e e e e e e e e e e
+                e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
+                e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
+                e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
+                e e e e e e e e e e e e e e e e
+                . e e . . . . . . . . . . e e .
+                . e e . . . . . . . . . . e e .
+                . e e . . . . . . . . . . e e .
+                . e e . . . . . . . . . . e e .
+                . e e . . . . . . . . . . e e .
+                `, SpriteKind.Table)
+        } else if (name == "Box") {
+            thing = sprites.create(img`
+                . e e e e e e e e e e e e e e .
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e 4 e e e e e e e e e e e e 4 e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e e e e e e e 5 5 e e e e e e e
+                e e e e e e e 5 5 e e e e e e e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e 4 e e e e e e e e e e e e 4 e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e 4 e e e e e e e e e e e e 4 e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e 4 e e e e e e e e e e e e 4 e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                . e e e e e e e e e e e e e e .
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                `, SpriteKind.Box)
+        } else {
+            thing = sprites.create(img`
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
+                1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
+                1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
+                1 1 1 1 2 2 2 2 2 2 2 2 2 2 2 2
+                e e e e e e e e e e e e e e e e
+                e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+                e e e e e e e e e e e e e e e e
+                e e . . . . . . . . . . . . e e
+                e e . . . . . . . . . . . . e e
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                . . . . . . . . . . . . . . . .
+                `, SpriteKind.Bed)
+        }
+        placeBeside(thing)
+        // Stack away from the nearest top/bottom edge, and never outside
+        // the world where the hero can't reach it.
+        if (hero.y > WORLD_HEIGHT / 2) {
+            thing.y = Math.max(8, hero.y - offset)
+        } else {
+            thing.y = Math.min(WORLD_HEIGHT - 8, hero.y + offset)
+        }
+        offset += 16
+    }
+    toPlace = []
+    if (craftMessage != "") {
+        hero.sayText(craftMessage, 2000, false)
+        craftMessage = ""
+    }
+}
+
+function openCraftMenu () {
+    menuItems = recipeList()
+    menuPick = 0
+    menuTop = 0
+    menuNote = ""
+    toPlace = []
+    craftMessage = ""
+    game.pushScene()
+    menuOpen = true
+    scene.setBackgroundColor(15)
+    menuScreen = sprites.create(image.create(160, 120), SpriteKind.Hud)
+    menuScreen.setPosition(80, 60)
+    controller.up.onEvent(ControllerButtonEvent.Pressed, function () {
+        if (menuPick > 0) {
+            menuPick += -1
+        }
+        menuNote = ""
+        drawMenu()
+    })
+    controller.down.onEvent(ControllerButtonEvent.Pressed, function () {
+        if (menuPick < menuItems.length - 1) {
+            menuPick += 1
+        }
+        menuNote = ""
+        drawMenu()
+    })
+    controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
+        makePick()
+    })
+    controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
+        closeCraftMenu()
+    })
+    drawMenu()
+}
+
+function makePick () {
+    let name = menuItems[menuPick]
+    if (!(canCraft(name))) {
+        menuNote = "Not enough yet!"
+        drawMenu()
+        return
+    }
+    craft(name)
+    if (name == "Table") {
+        closeCraftMenu()
+        return
+    }
+    menuItems = recipeList()
+    menuPick = Math.min(menuPick, menuItems.length - 1)
+    menuNote = "Made: " + name
+    drawMenu()
+}
+
+function closeCraftMenu () {
+    if (!(menuOpen)) {
+        return
+    }
+    menuOpen = false
+    game.popScene()
+    placeCrafted()
+    updateHud()
+    checkWin()
+}
+
+function drawMenu () {
+    // Keep the picked row on screen when the list is longer than 6.
+    if (menuPick < menuTop) {
+        menuTop = menuPick
+    }
+    if (menuPick > menuTop + 5) {
+        menuTop = menuPick - 5
+    }
+    let pic = menuScreen.image
+    pic.fill(15)
+    pic.print("CRAFTING", 56, 2, 5)
+    pic.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 12, 1)
+    pic.print("Gold" + gold + " Wool" + wool + " Lthr" + leather, 2, 21, 1)
+    pic.drawLine(0, 31, 159, 31, 11)
+    for (let row = 0; row < 6; row++) {
+        let n = menuTop + row
+        if (n < menuItems.length) {
+            let y = 34 + row * 10
+            if (n == menuPick) {
+                pic.fillRect(0, y - 1, 160, 10, 8)
+                pic.print(">", 2, y, 5)
+            }
+            if (canCraft(menuItems[n])) {
+                pic.print(menuItems[n], 10, y, 1)
+            } else {
+                pic.print(menuItems[n], 10, y, 11)
+            }
+        }
+    }
+    if (menuTop > 0) {
+        pic.print("^", 150, 34, 11)
+    }
+    if (menuTop + 6 < menuItems.length) {
+        pic.print("v", 150, 84, 11)
+    }
+    if (menuNote != "") {
+        pic.print(menuNote, 2, 98, 7)
+    } else {
+        pic.print("Needs: " + recipeCost(menuItems[menuPick]), 2, 98, 4)
+    }
+    pic.print("A make   B close", 2, 110, 11)
+}
 
 // ===== SCREEN TEXT =====
 function updateHud () {

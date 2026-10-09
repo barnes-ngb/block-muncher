@@ -16,9 +16,10 @@
 // HOW TO PLAY
 //   D-pad   walk
 //   A       punch the block you are standing on (trees, stone, iron)
-//   B       craft (a menu asks: A = yes, B = no)
+//   B       open the crafting menu (up/down to pick, A to make, B to close)
+//           The game pauses while the menu is open. Grey = not enough yet.
 //
-// THE CRAFTING PATH
+// THE CRAFTING PATH (all in the menu; things you already own drop off it)
 //   1. Crafting table : 4 wood          (you can craft this anywhere)
 //   2. Pickaxe        : 2 wood + 3 stone  (stand at your table)
 //   3. Box            : 8 wood            (stand at your table)
