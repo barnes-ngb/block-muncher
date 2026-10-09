@@ -405,6 +405,8 @@ function fillHoles () {
 }
 
 // Put a block or an animal somewhere on open grass (not in a house).
+// Tries 10 random spots, then looks tile by tile. If there is no grass
+// left at all, the sprite goes away.
 function placeOnGrass (thing: Sprite) {
     for (let tries = 0; tries < 10; tries++) {
         thing.setPosition(randomSpotX(), randomSpotY())
@@ -412,6 +414,18 @@ function placeOnGrass (thing: Sprite) {
             return
         }
     }
+    let map = game.currentScene().tileMap
+    let startCol = randint(0, Math.idiv(WORLD_WIDTH, 16) - 1)
+    for (let step = 0; step < Math.idiv(WORLD_WIDTH, 16); step++) {
+        let col = (startCol + step) % Math.idiv(WORLD_WIDTH, 16)
+        for (let row = 0; row < Math.idiv(WORLD_HEIGHT, 16); row++) {
+            if (map.getTileIndex(col, row) == GRASS) {
+                thing.setPosition(col * 16 + 8, row * 16 + 8)
+                return
+            }
+        }
+    }
+    thing.destroy()
 }
 
 // ===== THE HOUSE =====
