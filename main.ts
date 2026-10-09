@@ -1,4 +1,13 @@
-// BLOCK MUNCHER v5: HORSES, GOLD AND APPLES
+// BLOCK MUNCHER v6: THE BEACH AND THE OCEAN
+// v6 ideas from Lincoln's notes:
+//   Water and sand along one side of the map. You can go in the water
+//   (swimming is slow).
+//   A stone shovel (1 stone + 2 wood) digs sand: stand on sand, press A.
+//   Crafting is a menu now: B opens it, up/down picks, A makes it.
+//   Coming next: furnace, glass, gold armor, golden apples, a house with a
+//   door, and the Enderman.
+//
+// v5: HORSES, GOLD AND APPLES
 // v5 ideas from Lincoln's notes:
 //   Horses drop leather, and so do cows (cows still drop food too).
 //   3 leather + 1 iron makes a saddle. Ride a horse to go faster; B gets off.
@@ -43,7 +52,10 @@
 //
 // THE WORLD is bigger than the screen. Walk to the edge and the camera
 // follows you. Change WORLD_WIDTH and WORLD_HEIGHT to make it bigger
-// (the screen is 160 wide and 120 tall).
+// (the screen is 160 wide and 120 tall). The ground is made of 16x16
+// tiles, so sizes get rounded down to a multiple of 16.
+// BEACH_TILES and OCEAN_TILES set how wide the sand and the sea are, on
+// the right-hand side. Animals stay out of the water; you can swim.
 //
 // THIS FILE is the part you edit in Blocks: the tuning knobs.
 // The game itself lives in engine.ts (switch to JavaScript to see it).
@@ -51,8 +63,12 @@
 
 // ===== TUNING KNOBS: change one, play, and see if it got more fun =====
 let WORLD_WIDTH = 480
-let WORLD_HEIGHT = 360
+let WORLD_HEIGHT = 352
 let GRASS_TUFTS = 40
+let BEACH_TILES = 3
+let OCEAN_TILES = 6
+let SWIM_SPEED = 40
+let SAND_DIGS = 2
 let TREE_HITS = 3
 let STONE_HITS = 5
 let IRON_HITS = 6
