@@ -1144,7 +1144,13 @@ function placeCrafted () {
                 `, SpriteKind.Bed)
         }
         placeBeside(thing)
-        thing.y += offset
+        // Stack away from the nearest top/bottom edge, and never outside
+        // the world where the hero can't reach it.
+        if (hero.y > WORLD_HEIGHT / 2) {
+            thing.y = Math.max(8, hero.y - offset)
+        } else {
+            thing.y = Math.min(WORLD_HEIGHT - 8, hero.y + offset)
+        }
         offset += 16
     }
     toPlace = []
