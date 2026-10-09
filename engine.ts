@@ -1266,6 +1266,10 @@ let craftMessage = ""
 // screen with its own hearts), so eating waits here until then.
 let heartsToAdd = 0
 let lightFurnace = false
+// Where you were standing when the menu opened. (Inside the menu the
+// world is hidden, so we can't look for the table then.)
+let atTable = false
+let atFurnace = false
 
 function recipeList () {
     let list: string[] = []
@@ -1275,11 +1279,11 @@ function recipeList () {
     if (!(hasTable)) {
         list.push("Table")
     }
-    if (nearFurnace()) {
+    if (atFurnace) {
         list.push("Smelt gold")
         list.push("Smelt glass")
     }
-    if (hasTable && nearTable()) {
+    if (hasTable && atTable) {
         if (!(hasPickaxe)) {
             list.push("Pickaxe")
         } else if (!(hasIronPickaxe)) {
@@ -1638,6 +1642,8 @@ function placeCrafted () {
 }
 
 function openCraftMenu () {
+    atTable = nearTable()
+    atFurnace = nearFurnace()
     menuItems = recipeList()
     menuPick = 0
     menuTop = 0
@@ -1771,7 +1777,7 @@ function updateHud () {
 }
 
 function checkWin () {
-    if (hasTable && hasPickaxe && hasArmor && hasBed && boxes >= 1) {
+    if (hasTable && hasPickaxe && (hasArmor || hasGoldArmor) && hasBed && boxes >= 1) {
         game.splash("YOU CRAFTED IT ALL!", "What should we add next?")
     }
 }
