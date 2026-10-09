@@ -442,7 +442,8 @@ function houseMiddleCol () {
 }
 
 function houseMiddleRow () {
-    return Math.constrain(hero.y >> 4, 2, Math.idiv(WORLD_HEIGHT, 16) - 3)
+    // One row of room under the door, so there's an outside to step out to.
+    return Math.constrain(hero.y >> 4, 2, Math.idiv(WORLD_HEIGHT, 16) - 4)
 }
 
 // A house can't go in the sea.
@@ -541,7 +542,7 @@ function inHouse (thing: Sprite, c: number, r: number) {
 }
 
 // The door opens by itself when you walk up to it, and shuts behind you.
-// Mobs can't open it.
+// Mobs can't open it, and can't follow you through it.
 function updateDoor () {
     if (houseCol < 0 || !(hasDoor)) {
         return
@@ -549,6 +550,16 @@ function updateDoor () {
     let doorX = houseCol * 16 + 8
     let doorY = (houseRow + 2) * 16 + 8
     let near = Math.abs(hero.x - doorX) < 24 && Math.abs(hero.y - doorY) < 28
+    // Mobs can't open it: any mob in the doorway or inside gets put back
+    // outside, just below the door.
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton))) {
+        let inDoorway = Math.abs(mob.x - doorX) < 16 && Math.abs(mob.y - doorY) < 16
+        if (inDoorway || inHouse(mob, houseCol, houseRow)) {
+            mob.setPosition(doorX, Math.min(doorY + 24, WORLD_HEIGHT - 8))
+            mob.vx = 0
+            mob.vy = 0
+        }
+    }
     if (near && !(doorOpen)) {
         doorOpen = true
         setTile(houseCol, houseRow + 2, DOOR_OPEN, false)
