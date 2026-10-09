@@ -55,6 +55,8 @@ let goldenApples = 0
 let hasFurnace = false
 let hasGoldPickaxe = false
 let hasGoldArmor = false
+let hasHouse = false
+let hasDoor = false
 // What the furnace is cooking, how many, and how many seconds are left.
 let smeltWhat = ""
 let smeltCount = 0
@@ -164,11 +166,107 @@ let holeTile = img`
     d d d d d d d d d d d d d d d d
     d d d d d d d d d d d d d d d d
     `
+// House tiles: plank wall, glass window, wood floor, door shut and open.
+let wallTile = img`
+    e e e e e e e e e e e e e e e e
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e e e e e e e e e e e e e e e e
+    4 4 4 4 4 4 4 4 4 4 e 4 4 4 4 4
+    4 4 4 4 4 4 4 4 4 4 e 4 4 4 4 4
+    e e e e e e e e e e e e e e e e
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e e e e e e e e e e e e e e e e
+    4 4 4 4 4 4 4 4 4 4 e 4 4 4 4 4
+    4 4 4 4 4 4 4 4 4 4 e 4 4 4 4 4
+    e e e e e e e e e e e e e e e e
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e 4 4 4 4 4 e 4 4 4 4 4 4 4 4 4
+    e e e e e e e e e e e e e e e e
+    `
+let windowTile = img`
+    e e e e e e e e e e e e e e e e
+    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e 4 e e e e e e e e e e e e 4 e
+    e 4 e 9 9 9 9 9 9 9 9 1 1 e 4 e
+    e 4 e 9 9 9 9 9 9 9 9 1 9 e 4 e
+    e 4 e 9 9 9 9 9 9 9 1 9 9 e 4 e
+    e 4 e 9 9 9 9 9 9 1 9 9 9 e 4 e
+    e 4 e e e e e e e e e e e e 4 e
+    e 4 e 9 9 9 9 9 9 9 9 9 9 e 4 e
+    e 4 e 9 9 1 9 9 9 9 9 9 9 e 4 e
+    e 4 e 9 1 9 9 9 9 9 9 9 9 e 4 e
+    e 4 e 1 9 9 9 9 9 9 9 9 9 e 4 e
+    e 4 e e e e e e e e e e e e 4 e
+    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e 4 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e e e e e e e e e e e e e e e e
+    `
+let floorTile = img`
+    d d d d d d d d d d d d d d d d
+    4 4 4 4 4 4 4 b 4 4 4 4 4 4 4 4
+    4 4 4 4 4 4 4 b 4 4 4 4 4 4 4 4
+    4 4 4 4 4 4 4 b 4 4 4 4 4 4 4 4
+    b b b b b b b b b b b b b b b b
+    4 4 4 b 4 4 4 4 4 4 4 4 4 b 4 4
+    4 4 4 b 4 4 4 4 4 4 4 4 4 b 4 4
+    4 4 4 b 4 4 4 4 4 4 4 4 4 b 4 4
+    b b b b b b b b b b b b b b b b
+    4 4 4 4 4 4 4 4 4 4 4 b 4 4 4 4
+    4 4 4 4 4 4 4 4 4 4 4 b 4 4 4 4
+    4 4 4 4 4 4 4 4 4 4 4 b 4 4 4 4
+    b b b b b b b b b b b b b b b b
+    4 4 4 4 b 4 4 4 4 4 4 4 4 4 4 4
+    4 4 4 4 b 4 4 4 4 4 4 4 4 4 4 4
+    4 4 4 4 b 4 4 4 4 4 4 4 4 4 4 4
+    `
+let doorTile = img`
+    e e e e e e e e e e e e e e e e
+    e e e e e e e e e e e e e e e e
+    e e 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e e 4 e e e e e e e e e e e 4 e
+    e e 4 e 4 4 4 4 4 4 4 4 4 e 4 e
+    e e 4 e 4 4 4 4 4 4 4 4 4 e 4 e
+    e e 4 e e e e e e e e e e e 4 e
+    e e 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e e 4 4 4 4 4 4 4 4 4 4 4 5 5 4
+    e e 4 4 4 4 4 4 4 4 4 4 4 5 5 4
+    e e 4 e e e e e e e e e e e 4 e
+    e e 4 e 4 4 4 4 4 4 4 4 4 e 4 e
+    e e 4 e 4 4 4 4 4 4 4 4 4 e 4 e
+    e e 4 e e e e e e e e e e e 4 e
+    e e 4 4 4 4 4 4 4 4 4 4 4 4 4 e
+    e e e e e e e e e e e e e e e e
+    `
+let openDoorTile = img`
+    e e 4 4 4 4 4 b 4 4 4 4 4 4 e e
+    e e 4 4 4 4 4 b 4 4 4 4 4 4 e e
+    e e 4 4 4 4 4 b 4 4 4 4 4 4 e e
+    e e b b b b b b b b b b b b e e
+    e e 4 b 4 4 4 4 4 4 4 4 4 b e e
+    e e 4 b 4 4 4 4 4 4 4 4 4 b e e
+    e e 4 b 4 4 4 4 4 4 4 4 4 b e e
+    e e b b b b b b b b b b b b e e
+    e e 4 4 4 4 4 4 4 4 4 b 4 4 e e
+    e e 4 4 4 4 4 4 4 4 4 b 4 4 e e
+    e e 4 4 4 4 4 4 4 4 4 b 4 4 e e
+    e e b b b b b b b b b b b b e e
+    e e 4 4 b 4 4 4 4 4 4 4 4 4 e e
+    e e 4 4 b 4 4 4 4 4 4 4 4 4 e e
+    e e 4 4 b 4 4 4 4 4 4 4 4 4 e e
+    e e b b b b b b b b b b b b e e
+    `
 // Tile numbers in the map.
 let GRASS = 0
 let SAND = 1
 let WATER = 2
 let HOLE = 3
+let WALL = 4
+let WINDOW = 5
+let FLOOR = 6
+let DOOR = 7
+let DOOR_OPEN = 8
 // The same map with darker tiles for night. Both share one set of tiles,
 // so a hole dug in the day is still there at night.
 let dayMap: tiles.TileMapData = null
@@ -228,8 +326,8 @@ function buildWorld () {
             data.setUint8(4 + col + row * cols, tile)
         }
     }
-    dayMap = tiles.createTilemap(data, walls, [grassTile, sandTile, waterTile, holeTile], TileScale.Sixteen)
-    nightMap = tiles.createTilemap(data, walls, [darker(grassTile), darker(sandTile), darker(waterTile), darker(holeTile)], TileScale.Sixteen)
+    dayMap = tiles.createTilemap(data, walls, [grassTile, sandTile, waterTile, holeTile, wallTile, windowTile, floorTile, doorTile, openDoorTile], TileScale.Sixteen)
+    nightMap = tiles.createTilemap(data, walls, [darker(grassTile), darker(sandTile), darker(waterTile), darker(holeTile), darker(wallTile), darker(windowTile), darker(floorTile), darker(doorTile), darker(openDoorTile)], TileScale.Sixteen)
     tiles.setCurrentTilemap(dayMap)
 }
 
@@ -306,6 +404,149 @@ function fillHoles () {
     }
 }
 
+// Put a block or an animal somewhere on open grass (not in a house).
+function placeOnGrass (thing: Sprite) {
+    for (let tries = 0; tries < 10; tries++) {
+        thing.setPosition(randomSpotX(), randomSpotY())
+        if (tileUnder(thing) == GRASS) {
+            return
+        }
+    }
+}
+
+// ===== THE HOUSE =====
+// 5 tiles by 5: plank walls with glass windows, a wood floor inside,
+// and a doorway in the middle of the bottom wall. You end up standing
+// in the middle. Walls stop mobs; a door shuts the doorway.
+let houseCol = -1
+let houseRow = -1
+let doorOpen = false
+
+// The middle of the house: where you stand, kept inside the world.
+function houseMiddleCol () {
+    return Math.constrain(hero.x >> 4, 2, Math.idiv(WORLD_WIDTH, 16) - 3)
+}
+
+function houseMiddleRow () {
+    return Math.constrain(hero.y >> 4, 2, Math.idiv(WORLD_HEIGHT, 16) - 3)
+}
+
+// A house can't go in the sea.
+function houseFits () {
+    let map = game.currentScene().tileMap
+    let c = houseMiddleCol()
+    let r = houseMiddleRow()
+    for (let col = c - 2; col <= c + 2; col++) {
+        for (let row = r - 2; row <= r + 2; row++) {
+            if (map.getTileIndex(col, row) == WATER) {
+                return false
+            }
+        }
+    }
+    return true
+}
+
+function setTile (col: number, row: number, tile: number, wall: boolean) {
+    let map = game.currentScene().tileMap
+    map.setTileAt(col, row, tile)
+    map.setWallAt(col, row, wall)
+}
+
+function buildHouse () {
+    let c = houseMiddleCol()
+    let r = houseMiddleRow()
+    houseCol = c
+    houseRow = r
+    for (let col = c - 2; col <= c + 2; col++) {
+        for (let row = r - 2; row <= r + 2; row++) {
+            let edge = col == c - 2 || col == c + 2 || row == r - 2 || row == r + 2
+            if (!(edge)) {
+                setTile(col, row, FLOOR, false)
+            } else if (row == r - 2 && col != c - 2 && col != c + 2) {
+                setTile(col, row, WINDOW, true)
+            } else if (row == r && col != c) {
+                setTile(col, row, WINDOW, true)
+            } else if (row == r + 2 && col == c) {
+                // The doorway. It stays open until you make a door.
+                setTile(col, row, FLOOR, false)
+            } else {
+                setTile(col, row, WALL, true)
+            }
+        }
+    }
+    hero.setPosition(c * 16 + 8, r * 16 + 8)
+    clearHouseSpot(c, r)
+    if (hasDoor) {
+        doorOpen = true
+        shutDoor()
+    }
+}
+
+// Anything that was where the walls went: blocks go away, animals and
+// mobs move out, and your table, box, bed or furnace moves inside.
+function clearHouseSpot (c: number, r: number) {
+    for (let thing of sprites.allOfKind(SpriteKind.Tree).concat(sprites.allOfKind(SpriteKind.Stone)).concat(sprites.allOfKind(SpriteKind.Iron)).concat(sprites.allOfKind(SpriteKind.Gold)).concat(sprites.allOfKind(SpriteKind.Coal))) {
+        if (inHouseWall(thing, c, r)) {
+            thing.destroy()
+        }
+    }
+    for (let critter of sprites.allOfKind(SpriteKind.Pig).concat(sprites.allOfKind(SpriteKind.Cow)).concat(sprites.allOfKind(SpriteKind.Sheep)).concat(sprites.allOfKind(SpriteKind.Chicken)).concat(sprites.allOfKind(SpriteKind.Horse)).concat(sprites.allOfKind(SpriteKind.Decor))) {
+        if (critter != ridden && inHouseWall(critter, c, r)) {
+            placeOnGrass(critter)
+        }
+    }
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton))) {
+        if (inHouseWall(mob, c, r) || inHouse(mob, c, r)) {
+            placeOnGrass(mob)
+        }
+    }
+    let spot = 0
+    for (let stuff of sprites.allOfKind(SpriteKind.Table).concat(sprites.allOfKind(SpriteKind.Box)).concat(sprites.allOfKind(SpriteKind.Bed)).concat(sprites.allOfKind(SpriteKind.Furnace))) {
+        if (inHouseWall(stuff, c, r)) {
+            // The floor corners, then the middle of each side.
+            let spotCols = [c - 1, c + 1, c - 1, c + 1, c, c - 1, c + 1, c]
+            let spotRows = [r - 1, r - 1, r + 1, r + 1, r - 1, r, r, r + 1]
+            stuff.setPosition(spotCols[spot % 8] * 16 + 8, spotRows[spot % 8] * 16 + 8)
+            spot += 1
+        }
+    }
+}
+
+// Is this sprite touching the house's wall ring?
+function inHouseWall (thing: Sprite, c: number, r: number) {
+    let left = (c - 2) * 16
+    let top = (r - 2) * 16
+    let touchesOutside = thing.right > left && thing.left < left + 80 && thing.bottom > top && thing.top < top + 80
+    let insideFloor = thing.left >= left + 16 && thing.right <= left + 64 && thing.top >= top + 16 && thing.bottom <= top + 64
+    return touchesOutside && !(insideFloor)
+}
+
+function inHouse (thing: Sprite, c: number, r: number) {
+    return thing.x >= (c - 1) * 16 && thing.x < (c + 2) * 16 && thing.y >= (r - 1) * 16 && thing.y < (r + 2) * 16
+}
+
+// The door opens by itself when you walk up to it, and shuts behind you.
+// Mobs can't open it.
+function updateDoor () {
+    if (houseCol < 0 || !(hasDoor)) {
+        return
+    }
+    let doorX = houseCol * 16 + 8
+    let doorY = (houseRow + 2) * 16 + 8
+    let near = Math.abs(hero.x - doorX) < 24 && Math.abs(hero.y - doorY) < 28
+    if (near && !(doorOpen)) {
+        doorOpen = true
+        setTile(houseCol, houseRow + 2, DOOR_OPEN, false)
+    } else if (!(near) && doorOpen) {
+        shutDoor()
+    }
+}
+
+function shutDoor () {
+    doorOpen = false
+    setTile(houseCol, houseRow + 2, DOOR, true)
+}
+
 // Blocks and grass only go on grass.
 function randomSpotX () {
     return randint(10, Math.max(10, landRight - 10))
@@ -358,6 +599,7 @@ game.onUpdate(function () {
     hero.y = Math.constrain(hero.y, 8, WORLD_HEIGHT - 8)
     scene.centerCameraAt(cameraX(), cameraY())
     setHeroSpeed()
+    updateDoor()
     if (ridden != null) {
         ridden.setPosition(hero.x, hero.y + 4)
         ridden.vx = 0
@@ -502,7 +744,7 @@ function spawnBlock () {
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Iron)
     }
-    block.setPosition(randomSpotX(), randomSpotY())
+    placeOnGrass(block)
 }
 
 // ===== ANIMALS =====
@@ -605,7 +847,7 @@ function spawnAnimal () {
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Chicken)
     }
-    animal.setPosition(randomSpotX(), randomSpotY())
+    placeOnGrass(animal)
 }
 
 function wanderAll (kind: number) {
@@ -1276,6 +1518,7 @@ let lightFurnace = false
 // world is hidden, so we can't look for the table then.)
 let atTable = false
 let atFurnace = false
+let houseOk = false
 
 function recipeList () {
     let list: string[] = []
@@ -1310,6 +1553,12 @@ function recipeList () {
             list.push("Gold armor")
         }
         list.push("Golden apple")
+        if (!(hasHouse)) {
+            list.push("House")
+        }
+        if (!(hasDoor)) {
+            list.push("Door")
+        }
         if (!(hasSaddle)) {
             list.push("Saddle")
         }
@@ -1341,6 +1590,13 @@ function recipeCost (name: string) {
         return "8 wood"
     } else if (name == "Bed") {
         return "3 wool + 3 wood"
+    } else if (name == "House") {
+        if (!(houseOk)) {
+            return "Can't build in the sea"
+        }
+        return "20 wood + 10 glass"
+    } else if (name == "Door") {
+        return "6 wood"
     } else if (name == "Furnace") {
         return "8 stone"
     } else if (name == "Gold pickaxe") {
@@ -1382,6 +1638,10 @@ function canCraft (name: string) {
         return wood >= 8
     } else if (name == "Bed") {
         return wool >= 3 && wood >= 3
+    } else if (name == "House") {
+        return houseOk && wood >= 20 && glass >= 10
+    } else if (name == "Door") {
+        return wood >= 6
     } else if (name == "Furnace") {
         return stone >= 8
     } else if (name == "Gold pickaxe") {
@@ -1461,6 +1721,21 @@ function craft (name: string) {
         hasBed = true
         toPlace.push("Bed")
         craftMessage = "Stand on the bed, press B to sleep"
+    } else if (name == "House") {
+        wood += -20
+        glass += -10
+        hasHouse = true
+        toPlace.push("House")
+        craftMessage = "My house!"
+    } else if (name == "Door") {
+        wood += -6
+        hasDoor = true
+        toPlace.push("Door")
+        if (hasHouse) {
+            craftMessage = "Mobs can't get in now"
+        } else {
+            craftMessage = "It goes on your house"
+        }
     } else if (name == "Furnace") {
         stone += -8
         hasFurnace = true
@@ -1543,7 +1818,16 @@ function placeCrafted () {
     let offset = 0
     for (let name of toPlace) {
         let thing: Sprite = null
-        if (name == "Table") {
+        if (name == "House") {
+            buildHouse()
+            continue
+        } else if (name == "Door") {
+            if (houseCol >= 0) {
+                doorOpen = true
+                shutDoor()
+            }
+            continue
+        } else if (name == "Table") {
             thing = sprites.create(img`
                 e e e e e e e e e e e e e e e e
                 e 4 4 4 4 4 4 e e 4 4 4 4 4 4 e
@@ -1650,6 +1934,7 @@ function placeCrafted () {
 function openCraftMenu () {
     atTable = nearTable()
     atFurnace = nearFurnace()
+    houseOk = houseFits()
     menuItems = recipeList()
     menuPick = 0
     menuTop = 0
