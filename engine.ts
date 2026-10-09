@@ -29,6 +29,10 @@ namespace SpriteKind {
 
 let hero: Sprite = null
 let hud: Sprite = null
+// Event handlers below are registered as soon as this file loads, but the
+// hero and the text bar only exist once the start block runs. Handlers that
+// touch them wait for this.
+let gameStarted = false
 
 // ===== INVENTORY =====
 let wood = 0
@@ -108,6 +112,9 @@ function keepInWorld (kind: number) {
 }
 
 game.onUpdate(function () {
+    if (!(gameStarted)) {
+        return
+    }
     hero.x = Math.constrain(hero.x, 8, WORLD_WIDTH - 8)
     hero.y = Math.constrain(hero.y, 8, WORLD_HEIGHT - 8)
     scene.centerCameraAt(cameraX(), cameraY())
@@ -614,6 +621,9 @@ function startDay () {
 }
 
 game.onUpdateInterval(1000, function () {
+    if (!(gameStarted)) {
+        return
+    }
     secondsLeft += -1
     if (secondsLeft <= 0) {
         if (isNight) {
@@ -780,6 +790,9 @@ function findTarget () {
 }
 
 controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
+    if (!(gameStarted)) {
+        return
+    }
     findTarget()
     if (target != null) {
         punch(target)
@@ -873,6 +886,9 @@ function getOffHorse () {
 }
 
 controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
+    if (!(gameStarted)) {
+        return
+    }
     if (ridden != null) {
         // B on a horse gets you off, unless you put armor on it instead.
         if (horseArmors > 0 && armoredHorses.indexOf(ridden) < 0 && game.ask("Put ARMOR on your horse?", "B = no, get off")) {
@@ -1087,8 +1103,6 @@ function checkWin () {
 // ===== START THE GAME =====
 // Called by the "start the game" block at the end of main.ts, after
 // every knob has been set.
-let gameStarted = false
-
 function startTheGame () {
     // Only start once, even if the start block gets copied or put in a loop.
     if (gameStarted) {
