@@ -885,6 +885,9 @@ function goToSleep () {
     scene.setBackgroundColor(15)
     hero.sayText("Zzz...", 1500, false)
     pause(1500)
+    // Start the new day FIRST, so the world grows back as the new day
+    // (from day 2, some of the new blocks can be gold).
+    startDay()
     for (let index = 0; index < MAX_BLOCKS; index++) {
         if (blockCount() < MAX_BLOCKS) {
             spawnBlock()
@@ -895,7 +898,6 @@ function goToSleep () {
             spawnAnimal()
         }
     }
-    startDay()
 }
 
 // ===== CRAFTING =====
