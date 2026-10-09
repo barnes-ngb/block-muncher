@@ -121,9 +121,13 @@ let lastHurt = 0
 
 // ===== HORSE RIDING =====
 let ridden: Sprite = null
-let armoredHorse: Sprite = null
 let horseNearby: Sprite = null
 let horseHearts = 0
+// Every horse wearing armor, and every armored horse that has been hit once.
+// Lists remember each horse separately, so getting off and on again does not
+// heal a horse, and armoring a second horse does not forget the first.
+let armoredHorses: Sprite[] = []
+let woundedHorses: Sprite[] = []
 let hasTable = false
 let hasPickaxe = false
 let hasArmor = false
@@ -570,11 +574,12 @@ function hurt (amount: number) {
         if (horseHearts <= 0) {
             let lostHorse = ridden
             getOffHorse()
-            if (lostHorse == armoredHorse) {
-                armoredHorse = null
-            }
+            armoredHorses.removeElement(lostHorse)
+            woundedHorses.removeElement(lostHorse)
             lostHorse.destroy(effects.spray, 300)
             hero.sayText("My horse!", 1000, false)
+        } else {
+            woundedHorses.push(ridden)
         }
     } else if (game.runtime() - lastHurt > HURT_COOLDOWN_MS) {
         lastHurt = game.runtime()
@@ -726,6 +731,8 @@ function collect (block: Sprite) {
         wool += 1
     } else if (block.kind() == SpriteKind.Horse) {
         leather += 1
+        armoredHorses.removeElement(block)
+        woundedHorses.removeElement(block)
     } else if (block.kind() == SpriteKind.Cow) {
         food += 1
         leather += 1
@@ -924,7 +931,7 @@ function findHorse () {
 function getOnHorse () {
     ridden = horseNearby
     ridden.z = 5
-    if (ridden == armoredHorse) {
+    if (armoredHorses.indexOf(ridden) >= 0 && woundedHorses.indexOf(ridden) < 0) {
         horseHearts = 2
     } else {
         horseHearts = 1
@@ -940,9 +947,10 @@ function getOffHorse () {
 
 controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
     if (ridden != null) {
-        if (horseArmors > 0 && ridden != armoredHorse && game.ask("Put ARMOR on your horse?", "horse gets 2 hearts")) {
+        // B on a horse gets you off, unless you put armor on it instead.
+        if (horseArmors > 0 && armoredHorses.indexOf(ridden) < 0 && game.ask("Put ARMOR on your horse?", "B = no, get off")) {
             horseArmors += -1
-            armoredHorse = ridden
+            armoredHorses.push(ridden)
             horseHearts = 2
             ridden.setImage(img`
             . . . . . . . . . . . . . . . .
@@ -962,7 +970,7 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
             . . . . . . . . . . . . . . . .
             . . . . . . . . . . . . . . . .
             `)
-        } else if (game.ask("Get off the horse?", "B = stay on")) {
+        } else {
             getOffHorse()
         }
     } else if (onBed() && !(isNight)) {
