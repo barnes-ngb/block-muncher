@@ -1232,7 +1232,9 @@ function teleport () {
         let distance = randint(PEARL_DISTANCE / 2, PEARL_DISTANCE)
         let x = Math.constrain(hero.x + Math.cos(angle) * distance, 8, WORLD_WIDTH - 8)
         let y = Math.constrain(hero.y + Math.sin(angle) * distance, 8, WORLD_HEIGHT - 8)
-        let clear = true
+        // Near the world's edge the spot can get squashed back toward you.
+        // It has to be a real jump.
+        let clear = Math.abs(x - hero.x) + Math.abs(y - hero.y) >= PEARL_DISTANCE / 2
         for (let corner = 0; corner < 4; corner++) {
             let cx = x - 7
             let cy = y - 7
