@@ -1,11 +1,20 @@
-// BLOCK MUNCHER v6: THE BEACH AND THE OCEAN
+// BLOCK MUNCHER v7: THE FURNACE AND GOLD
+// v7 ideas from Lincoln's notes:
+//   Coal ore (needs a pickaxe). A furnace costs 8 stone.
+//   At the furnace, 1 coal smelts raw gold into gold, or sand into glass.
+//   It takes 15 seconds (SMELT_SECONDS) and cooks up to 8 at once.
+//   Gold armor (8 gold) blocks more hits than iron armor.
+//   Gold pickaxe (3 gold + 2 wood) mines fastest.
+//   Golden apple: 8 gold + 1 apple. Eat it from the menu for +2 hearts.
+//   Apples are their own thing now (eat one with B when you're hurt).
+//   B opens the menu anywhere; your table and furnace add what they make.
+//
+// v6: THE BEACH AND THE OCEAN
 // v6 ideas from Lincoln's notes:
 //   Water and sand along one side of the map. You can go in the water
 //   (swimming is slow).
 //   A stone shovel (1 stone + 2 wood) digs sand: stand on sand, press A.
 //   Crafting is a menu now: B opens it, up/down picks, A makes it.
-//   Coming next: furnace, glass, gold armor, golden apples, a house with a
-//   door, and the Enderman.
 //
 // v5: HORSES, GOLD AND APPLES
 // v5 ideas from Lincoln's notes:
@@ -25,7 +34,7 @@
 // HOW TO PLAY
 //   D-pad   walk
 //   A       punch the block you are standing on (trees, stone, iron)
-//   B       open the crafting menu (up/down to pick, A to make, B to close)
+//   B       open the menu (up/down to pick, A to make, B to close)
 //           The game pauses while the menu is open. Grey = not enough yet.
 //
 // THE CRAFTING PATH (all in the menu; things you already own drop off it)
@@ -84,6 +93,11 @@ let APPLE_CHANCE = 20
 let GOLD_FROM_DAY = 2
 let GOLD_CHANCE = 15
 let GOLD_HITS = 6
+let COAL_HITS = 5
+let SMELT_SECONDS = 15
+let SMELT_BATCH = 8
+let GOLD_PICK_POWER = 6
+let GOLDEN_APPLE_HEARTS = 2
 let DAY_SECONDS = 60
 let NIGHT_SECONDS = 120
 let START_HEARTS = 5

@@ -16,6 +16,8 @@ namespace SpriteKind {
     export const Chicken = SpriteKind.create()
     export const Horse = SpriteKind.create()
     export const Gold = SpriteKind.create()
+    export const Coal = SpriteKind.create()
+    export const Furnace = SpriteKind.create()
     export const Bed = SpriteKind.create()
     export const Zombie = SpriteKind.create()
     export const Spider = SpriteKind.create()
@@ -45,6 +47,18 @@ let leather = 0
 let sand = 0
 let hasShovel = false
 let gold = 0
+let rawGold = 0
+let coal = 0
+let glass = 0
+let apples = 0
+let goldenApples = 0
+let hasFurnace = false
+let hasGoldPickaxe = false
+let hasGoldArmor = false
+// What the furnace is cooking, how many, and how many seconds are left.
+let smeltWhat = ""
+let smeltCount = 0
+let smeltLeft = 0
 let hasIronPickaxe = false
 let hasSaddle = false
 let horseArmors = 0
@@ -430,7 +444,7 @@ function spawnBlock () {
             . . . . . e e e e e e . . . . .
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Tree)
-    } else if (roll <= 8) {
+    } else if (roll <= 7) {
         block = sprites.create(img`
             . . . . . . . . . . . . . . . .
             . . . . . b b b b b b . . . . .
@@ -449,6 +463,25 @@ function spawnBlock () {
             . . . c c c c c c c c c c . . .
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Stone)
+    } else if (roll == 8) {
+        block = sprites.create(img`
+            . . . . . . . . . . . . . . . .
+            . . . . . b b b b b b . . . . .
+            . . . b b b f b b b b b b . . .
+            . . b b f b b b b f b b b b . .
+            . b b b b b b f b b b f b b b .
+            . b f b b b b b b b b b b f b .
+            . b b b f b b b f b b b b b b .
+            b b b b b b b b b b b f b b b b
+            b b f b b b f b b b b b b f b b
+            b b b b b b b b b f b b b b b b
+            b b b f b b b b b b b b f b b b
+            . b b b b f b b f b b b b b b .
+            . b b b b b b b b b f b b b b .
+            . . b b f b b b b b b b f b . .
+            . . . f c f c f c f c f c . . .
+            . . . . . . . . . . . . . . . .
+            `, SpriteKind.Coal)
     } else {
         block = sprites.create(img`
             . . . . . . . . . . . . . . . .
@@ -748,10 +781,21 @@ function hurt (amount: number) {
     } else if (game.runtime() - lastHurt > HURT_COOLDOWN_MS) {
         lastHurt = game.runtime()
         let damage = amount
-        if (hasArmor) {
+        if (hasArmor || hasGoldArmor) {
+            let blockChance = 50
+            if (hasGoldArmor) {
+                // Gold armor blocks 3 hits out of 4.
+                blockChance = 75
+            }
+            // Armor takes 1 off a big hit (a creeper).
             if (damage > 1) {
                 damage = damage - 1
-            } else if (Math.percentChance(50)) {
+                if (hasGoldArmor && Math.percentChance(blockChance)) {
+                    // Gold armor can block what's left, too.
+                    damage = 0
+                    hero.sayText("Blocked!", 500, false)
+                }
+            } else if (Math.percentChance(blockChance)) {
                 damage = 0
                 hero.sayText("Blocked!", 500, false)
             }
@@ -851,6 +895,12 @@ game.onUpdateInterval(1000, function () {
     if (!(gameStarted)) {
         return
     }
+    if (smeltLeft > 0) {
+        smeltLeft += -1
+        if (smeltLeft <= 0) {
+            finishSmelting()
+        }
+    }
     secondsLeft += -1
     if (secondsLeft <= 0) {
         if (isNight) {
@@ -879,9 +929,16 @@ function hitsNeeded (block: Sprite) {
         needed = IRON_HITS
     } else if (block.kind() == SpriteKind.Gold) {
         needed = GOLD_HITS
+    } else if (block.kind() == SpriteKind.Coal) {
+        needed = COAL_HITS
     }
-    if (hasPickaxe && (block.kind() == SpriteKind.Stone || block.kind() == SpriteKind.Iron || block.kind() == SpriteKind.Gold)) {
-        needed = Math.ceil(needed / PICKAXE_POWER)
+    if (hasPickaxe && (block.kind() == SpriteKind.Stone || block.kind() == SpriteKind.Iron || block.kind() == SpriteKind.Gold || block.kind() == SpriteKind.Coal)) {
+        // The gold pickaxe is the fastest.
+        if (hasGoldPickaxe) {
+            needed = Math.ceil(needed / GOLD_PICK_POWER)
+        } else {
+            needed = Math.ceil(needed / PICKAXE_POWER)
+        }
     }
     return needed
 }
@@ -906,13 +963,18 @@ function collect (block: Sprite) {
     } else if (block.kind() == SpriteKind.Tree) {
         wood += 1
         if (Math.percentChance(APPLE_CHANCE)) {
-            food += 1
+            apples += 1
             hero.sayText("An apple!", 800, false)
         }
     } else if (block.kind() == SpriteKind.Stone) {
         stone += 1
     } else if (block.kind() == SpriteKind.Gold) {
-        gold += 1
+        // Gold comes out raw. Smelt it in a furnace to get gold.
+        rawGold += 1
+        hero.sayText("+1 raw gold", 600, false)
+    } else if (block.kind() == SpriteKind.Coal) {
+        coal += 1
+        hero.sayText("+1 coal", 600, false)
     } else {
         iron += 1
     }
@@ -924,7 +986,7 @@ function collect (block: Sprite) {
 }
 
 function punch (block: Sprite) {
-    if (block.kind() == SpriteKind.Iron && !(hasPickaxe)) {
+    if ((block.kind() == SpriteKind.Iron || block.kind() == SpriteKind.Coal) && !(hasPickaxe)) {
         hero.sayText("Need a pickaxe!", 1000, false)
     } else if (block.kind() == SpriteKind.Gold && !(hasIronPickaxe)) {
         hero.sayText("Need an iron pickaxe!", 1000, false)
@@ -965,6 +1027,11 @@ function findTarget () {
     for (let ore of sprites.allOfKind(SpriteKind.Iron)) {
         if (hero.overlapsWith(ore)) {
             target = ore
+        }
+    }
+    for (let coalOre of sprites.allOfKind(SpriteKind.Coal)) {
+        if (hero.overlapsWith(coalOre)) {
+            target = coalOre
         }
     }
     for (let goldOre of sprites.allOfKind(SpriteKind.Gold)) {
@@ -1032,7 +1099,7 @@ controller.A.onEvent(ControllerButtonEvent.Pressed, function () {
 })
 
 function blockCount () {
-    return sprites.allOfKind(SpriteKind.Tree).length + sprites.allOfKind(SpriteKind.Stone).length + sprites.allOfKind(SpriteKind.Iron).length + sprites.allOfKind(SpriteKind.Gold).length
+    return sprites.allOfKind(SpriteKind.Tree).length + sprites.allOfKind(SpriteKind.Stone).length + sprites.allOfKind(SpriteKind.Iron).length + sprites.allOfKind(SpriteKind.Gold).length + sprites.allOfKind(SpriteKind.Coal).length
 }
 
 // ===== SLEEPING =====
@@ -1055,6 +1122,10 @@ function goToSleep () {
     scene.setBackgroundColor(15)
     hero.sayText("Zzz...", 1500, false)
     pause(1500)
+    // The furnace finishes while you sleep.
+    if (smeltLeft > 0) {
+        finishSmelting()
+    }
     // Start the new day FIRST, so the world grows back as the new day
     // (from day 2, some of the new blocks can be gold).
     startDay()
@@ -1075,6 +1146,16 @@ function nearTable () {
     let near = false
     for (let table of sprites.allOfKind(SpriteKind.Table)) {
         if (hero.overlapsWith(table)) {
+            near = true
+        }
+    }
+    return near
+}
+
+function nearFurnace () {
+    let near = false
+    for (let furnace of sprites.allOfKind(SpriteKind.Furnace)) {
+        if (hero.overlapsWith(furnace)) {
             near = true
         }
     }
@@ -1156,22 +1237,25 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
         }
     } else if (hasSaddle && findHorse() && game.ask("Ride the horse?", "B on the horse to get off")) {
         getOnHorse()
-    } else if (food > 0 && info.life() < START_HEARTS && game.ask("Eat food?", "+1 heart")) {
-        food += -1
+    } else if ((food > 0 || apples > 0) && info.life() < START_HEARTS && game.ask("Eat food?", "+1 heart")) {
+        if (food > 0) {
+            food += -1
+        } else {
+            apples += -1
+        }
         info.changeLifeBy(1)
-    } else if (!(hasTable) || nearTable()) {
+    } else {
         // The menu updates the screen itself when it closes.
         openCraftMenu()
         return
-    } else {
-        game.splash("Go stand at your table", "then press B to craft")
     }
     updateHud()
     checkWin()
 })
 
 // ===== THE CRAFTING MENU =====
-// B opens it (anywhere for the first table, at your table after that).
+// B opens it anywhere. What it offers depends on where you stand:
+// at your table you can craft, at your furnace you can smelt.
 // Up and down pick a recipe, A makes it, B closes the menu.
 // The game is paused while the menu is open.
 // To add a recipe: add its name to recipeList, its cost to recipeCost,
@@ -1184,31 +1268,56 @@ let menuTop = 0
 let menuNote = ""
 let toPlace: string[] = []
 let craftMessage = ""
+// Hearts can only change once the menu is closed (the menu is its own
+// screen with its own hearts), so eating waits here until then.
+let heartsToAdd = 0
+let lightFurnace = false
+// Where you were standing when the menu opened. (Inside the menu the
+// world is hidden, so we can't look for the table then.)
+let atTable = false
+let atFurnace = false
 
 function recipeList () {
     let list: string[] = []
+    if (goldenApples > 0) {
+        list.push("Eat golden apple")
+    }
     if (!(hasTable)) {
         list.push("Table")
-        return list
     }
-    if (!(hasPickaxe)) {
-        list.push("Pickaxe")
-    } else if (!(hasIronPickaxe)) {
-        list.push("Iron pickaxe")
+    if (atFurnace) {
+        list.push("Smelt gold")
+        list.push("Smelt glass")
     }
-    if (!(hasShovel)) {
-        list.push("Shovel")
-    }
-    if (!(hasArmor)) {
-        list.push("Armor")
-    }
-    if (!(hasSaddle)) {
-        list.push("Saddle")
-    }
-    list.push("Horse armor")
-    list.push("Box")
-    if (!(hasBed)) {
-        list.push("Bed")
+    if (hasTable && atTable) {
+        if (!(hasPickaxe)) {
+            list.push("Pickaxe")
+        } else if (!(hasIronPickaxe)) {
+            list.push("Iron pickaxe")
+        } else if (!(hasGoldPickaxe)) {
+            list.push("Gold pickaxe")
+        }
+        if (!(hasShovel)) {
+            list.push("Shovel")
+        }
+        if (!(hasFurnace)) {
+            list.push("Furnace")
+        }
+        if (!(hasArmor) && !(hasGoldArmor)) {
+            list.push("Armor")
+        }
+        if (!(hasGoldArmor)) {
+            list.push("Gold armor")
+        }
+        list.push("Golden apple")
+        if (!(hasSaddle)) {
+            list.push("Saddle")
+        }
+        list.push("Horse armor")
+        list.push("Box")
+        if (!(hasBed)) {
+            list.push("Bed")
+        }
     }
     return list
 }
@@ -1232,6 +1341,24 @@ function recipeCost (name: string) {
         return "8 wood"
     } else if (name == "Bed") {
         return "3 wool + 3 wood"
+    } else if (name == "Furnace") {
+        return "8 stone"
+    } else if (name == "Gold pickaxe") {
+        return "3 gold + 2 wood"
+    } else if (name == "Gold armor") {
+        return "8 gold"
+    } else if (name == "Golden apple") {
+        return "8 gold + 1 apple"
+    } else if (name == "Eat golden apple") {
+        return "+" + GOLDEN_APPLE_HEARTS + " hearts (have " + goldenApples + ")"
+    } else if (name == "Smelt gold" || name == "Smelt glass") {
+        if (smeltLeft > 0) {
+            return "Furnace busy: " + smeltLeft + "s"
+        } else if (name == "Smelt gold") {
+            return "1 coal + raw gold"
+        } else {
+            return "1 coal + sand"
+        }
     }
     return ""
 }
@@ -1255,6 +1382,20 @@ function canCraft (name: string) {
         return wood >= 8
     } else if (name == "Bed") {
         return wool >= 3 && wood >= 3
+    } else if (name == "Furnace") {
+        return stone >= 8
+    } else if (name == "Gold pickaxe") {
+        return gold >= 3 && wood >= 2
+    } else if (name == "Gold armor") {
+        return gold >= 8
+    } else if (name == "Golden apple") {
+        return gold >= 8 && apples >= 1
+    } else if (name == "Eat golden apple") {
+        return goldenApples > 0
+    } else if (name == "Smelt gold") {
+        return smeltLeft <= 0 && coal >= 1 && rawGold >= 1
+    } else if (name == "Smelt glass") {
+        return smeltLeft <= 0 && coal >= 1 && sand >= 1
     }
     return false
 }
@@ -1320,7 +1461,80 @@ function craft (name: string) {
         hasBed = true
         toPlace.push("Bed")
         craftMessage = "Stand on the bed, press B to sleep"
+    } else if (name == "Furnace") {
+        stone += -8
+        hasFurnace = true
+        toPlace.push("Furnace")
+        craftMessage = "Stand at it, press B to smelt"
+    } else if (name == "Gold pickaxe") {
+        gold += -3
+        wood += -2
+        hasGoldPickaxe = true
+        craftMessage = "The fastest pickaxe!"
+    } else if (name == "Gold armor") {
+        gold += -8
+        hasGoldArmor = true
+        hero.setImage(img`
+            . . . . 4 4 4 4 4 4 4 4 . . . .
+            . . . . 4 5 5 5 5 5 5 4 . . . .
+            . . . . 4 d d d d d d 4 . . . .
+            . . . . d d d d d d d d . . . .
+            . . . . d f 1 d d 1 f d . . . .
+            . . . . d d d d d d d d . . . .
+            . . . . d d d 3 3 d d d . . . .
+            . . . . d d d d d d d d . . . .
+            . . 4 4 4 4 4 4 4 4 4 4 4 4 . .
+            . . 4 5 5 5 5 5 5 5 5 5 5 4 . .
+            . . d d 4 5 5 5 5 5 5 4 d d . .
+            . . d d 4 4 4 4 4 4 4 4 d d . .
+            . . . . 4 5 5 5 5 5 5 4 . . . .
+            . . . . 4 5 5 . . 5 5 4 . . . .
+            . . . . 4 4 4 . . 4 4 4 . . . .
+            . . . . e e e . . e e e . . . .
+            `)
+    } else if (name == "Golden apple") {
+        gold += -8
+        apples += -1
+        goldenApples += 1
+        craftMessage = "A golden apple!"
+    } else if (name == "Eat golden apple") {
+        goldenApples += -1
+        heartsToAdd += GOLDEN_APPLE_HEARTS
+        craftMessage = "Yum! +" + GOLDEN_APPLE_HEARTS + " hearts"
+    } else if (name == "Smelt gold") {
+        smeltWhat = "gold"
+        smeltCount = Math.min(rawGold, SMELT_BATCH)
+        rawGold += 0 - smeltCount
+        startSmelting()
+    } else if (name == "Smelt glass") {
+        smeltWhat = "glass"
+        smeltCount = Math.min(sand, SMELT_BATCH)
+        sand += 0 - smeltCount
+        startSmelting()
     }
+}
+
+// ===== THE FURNACE =====
+// One coal cooks up to SMELT_BATCH things. It takes SMELT_SECONDS, then
+// they pop into your bag wherever you are.
+function startSmelting () {
+    coal += -1
+    smeltLeft = SMELT_SECONDS
+    lightFurnace = true
+    craftMessage = "Smelting " + smeltCount + " " + smeltWhat + "..."
+}
+
+function finishSmelting () {
+    smeltLeft = 0
+    if (smeltWhat == "gold") {
+        gold += smeltCount
+    } else {
+        glass += smeltCount
+    }
+    hero.sayText(smeltCount + " " + smeltWhat + " ready!", 1500, false)
+    smeltCount = 0
+    smeltWhat = ""
+    updateHud()
 }
 
 // Tables, boxes and beds appear in the world after the menu closes,
@@ -1348,6 +1562,25 @@ function placeCrafted () {
                 . e e . . . . . . . . . . e e .
                 . e e . . . . . . . . . . e e .
                 `, SpriteKind.Table)
+        } else if (name == "Furnace") {
+            thing = sprites.create(img`
+                . b b b b b b b b b b b b b b .
+                b c c c c c c c c c c c c c c b
+                b c b b b b b b b b b b b b c b
+                b c b d b b b b b b b b d b c b
+                b c b b b b b b b b b b b b c b
+                b c b b f f f f f f f f b b c b
+                b c b b f f f f f f f f b b c b
+                b c b b f f f f f f f f b b c b
+                b c b b f f 2 4 4 2 f f b b c b
+                b c b b f 2 4 5 5 4 2 f b b c b
+                b c b b f f f f f f f f b b c b
+                b c b b b b b b b b b b b b c b
+                b c b d b b b b b b b b d b c b
+                b c c c c c c c c c c c c c c b
+                . b b b b b b b b b b b b b b .
+                . . . . . . . . . . . . . . . .
+                `, SpriteKind.Furnace)
         } else if (name == "Box") {
             thing = sprites.create(img`
                 . e e e e e e e e e e e e e e .
@@ -1398,6 +1631,16 @@ function placeCrafted () {
         offset += 16
     }
     toPlace = []
+    if (heartsToAdd > 0) {
+        info.changeLifeBy(heartsToAdd)
+        heartsToAdd = 0
+    }
+    if (lightFurnace) {
+        lightFurnace = false
+        for (let furnace of sprites.allOfKind(SpriteKind.Furnace)) {
+            furnace.startEffect(effects.fire, SMELT_SECONDS * 1000)
+        }
+    }
     if (craftMessage != "") {
         hero.sayText(craftMessage, 2000, false)
         craftMessage = ""
@@ -1405,12 +1648,16 @@ function placeCrafted () {
 }
 
 function openCraftMenu () {
+    atTable = nearTable()
+    atFurnace = nearFurnace()
     menuItems = recipeList()
     menuPick = 0
     menuTop = 0
     menuNote = ""
     toPlace = []
     craftMessage = ""
+    heartsToAdd = 0
+    lightFurnace = false
     game.pushScene()
     menuOpen = true
     scene.setBackgroundColor(15)
@@ -1440,6 +1687,9 @@ function openCraftMenu () {
 }
 
 function makePick () {
+    if (menuItems.length == 0) {
+        return
+    }
     let name = menuItems[menuPick]
     if (!(canCraft(name))) {
         menuNote = "Not enough yet!"
@@ -1447,12 +1697,12 @@ function makePick () {
         return
     }
     craft(name)
-    if (name == "Table") {
+    if (name == "Table" || name == "Eat golden apple") {
         closeCraftMenu()
         return
     }
     menuItems = recipeList()
-    menuPick = Math.min(menuPick, menuItems.length - 1)
+    menuPick = Math.max(0, Math.min(menuPick, menuItems.length - 1))
     menuNote = "Made: " + name
     drawMenu()
 }
@@ -1478,14 +1728,23 @@ function drawMenu () {
     }
     let pic = menuScreen.image
     pic.fill(15)
-    pic.print("CRAFTING", 56, 2, 5)
-    pic.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 12, 1)
-    pic.print("Gold" + gold + " Wool" + wool + " Lthr" + leather + " Sand" + sand, 2, 21, 1)
-    pic.drawLine(0, 31, 159, 31, 11)
+    pic.print("CRAFTING", 56, 1, 5)
+    pic.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 10, 1, image.font5)
+    pic.print("Coal" + coal + " Gold" + gold + " Raw gold" + rawGold, 2, 16, 1, image.font5)
+    pic.print("Sand" + sand + " Glass" + glass + " Food" + food, 2, 22, 1, image.font5)
+    pic.print("Wool" + wool + " Lthr" + leather + " Apple" + apples, 2, 28, 1, image.font5)
+    pic.drawLine(0, 34, 159, 34, 11)
+    if (menuItems.length == 0) {
+        pic.print("Nothing to make here.", 2, 40, 1)
+        pic.print("Stand at your table", 2, 54, 11)
+        pic.print("or your furnace.", 2, 64, 11)
+        pic.print("B close", 2, 110, 11)
+        return
+    }
     for (let row = 0; row < 6; row++) {
         let n = menuTop + row
         if (n < menuItems.length) {
-            let y = 34 + row * 10
+            let y = 37 + row * 10
             if (n == menuPick) {
                 pic.fillRect(0, y - 1, 160, 10, 8)
                 pic.print(">", 2, y, 5)
@@ -1498,24 +1757,24 @@ function drawMenu () {
         }
     }
     if (menuTop > 0) {
-        pic.print("^", 150, 34, 11)
+        pic.print("^", 150, 37, 11)
     }
     if (menuTop + 6 < menuItems.length) {
-        pic.print("v", 150, 84, 11)
+        pic.print("v", 150, 87, 11)
     }
     if (menuNote != "") {
-        pic.print(menuNote, 2, 98, 7)
+        pic.print(menuNote, 2, 99, 7)
     } else {
-        pic.print("Needs: " + recipeCost(menuItems[menuPick]), 2, 98, 4)
+        pic.print("Needs: " + recipeCost(menuItems[menuPick]), 2, 99, 4)
     }
-    pic.print("A make   B close", 2, 110, 11)
+    pic.print("A make   B close", 2, 111, 11)
 }
 
 // ===== SCREEN TEXT =====
 function updateHud () {
     hud.image.fill(15)
     hud.image.print("Wood" + wood + " Stone" + stone + " Iron" + iron, 2, 1, 1)
-    hud.image.print("Gold" + gold + " Food" + food + " Sand" + sand, 2, 10, 1)
+    hud.image.print("Gold" + gold + " Coal" + coal + " Food" + food, 2, 10, 1)
     if (isNight) {
         hud.image.print("NIGHT " + day + "  " + secondsLeft + "s left", 2, 19, 2)
     } else {
@@ -1524,7 +1783,7 @@ function updateHud () {
 }
 
 function checkWin () {
-    if (hasTable && hasPickaxe && hasArmor && hasBed && boxes >= 1) {
+    if (hasTable && hasPickaxe && (hasArmor || hasGoldArmor) && hasBed && boxes >= 1) {
         game.splash("YOU CRAFTED IT ALL!", "What should we add next?")
     }
 }
