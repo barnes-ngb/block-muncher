@@ -1,4 +1,12 @@
-// BLOCK MUNCHER v8: A HOUSE WITH A DOOR
+// BLOCK MUNCHER v9: THE ENDERMAN
+// v9 ideas from Lincoln's notes:
+//   An Enderman turns up now and then, day or night. It leaves you alone
+//   until you hit it, then it chases you. 4 hits and it drops an ender
+//   pearl.
+//   In the menu, the ender pearl jumps you to a random spot nearby. It
+//   costs a heart.
+//
+// v8: A HOUSE WITH A DOOR
 // v8 ideas from Lincoln's notes:
 //   House: 20 wood + 10 glass, made at your table. It appears around you:
 //   plank walls, glass windows, a wood floor and a doorway.
@@ -119,5 +127,10 @@ let SKELETON_SPEED = 20
 let ARROW_SPEED = 70
 let HURT_COOLDOWN_MS = 1000
 let REACH = 32
+let ENDER_HITS = 4
+let ENDER_SPAWN_MS = 20000
+let ENDER_CHANCE = 30
+let ENDER_SPEED = 40
+let PEARL_DISTANCE = 80
 
 blockMuncher.startGame()

@@ -18,6 +18,7 @@ namespace SpriteKind {
     export const Gold = SpriteKind.create()
     export const Coal = SpriteKind.create()
     export const Furnace = SpriteKind.create()
+    export const Enderman = SpriteKind.create()
     export const Bed = SpriteKind.create()
     export const Zombie = SpriteKind.create()
     export const Spider = SpriteKind.create()
@@ -57,6 +58,9 @@ let hasGoldPickaxe = false
 let hasGoldArmor = false
 let hasHouse = false
 let hasDoor = false
+let pearls = 0
+// Endermen you have hit. They chase you; the others just wander.
+let angryEnders: Sprite[] = []
 // What the furnace is cooking, how many, and how many seconds are left.
 let smeltWhat = ""
 let smeltCount = 0
@@ -511,7 +515,7 @@ function clearHouseSpot (c: number, r: number) {
             placeOnGrass(critter)
         }
     }
-    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton))) {
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman))) {
         if (inHouseWall(mob, c, r) || inHouse(mob, c, r)) {
             placeOnGrass(mob)
         }
@@ -552,7 +556,7 @@ function updateDoor () {
     let near = Math.abs(hero.x - doorX) < 24 && Math.abs(hero.y - doorY) < 28
     // Mobs can't open it: any mob in the doorway or inside gets put back
     // outside, just below the door.
-    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton))) {
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman))) {
         let inDoorway = Math.abs(mob.x - doorX) < 16 && Math.abs(mob.y - doorY) < 16
         if (inDoorway || inHouse(mob, houseCol, houseRow)) {
             mob.setPosition(doorX, Math.min(doorY + 24, WORLD_HEIGHT - 8))
@@ -636,6 +640,7 @@ game.onUpdate(function () {
     keepInWorld(SpriteKind.Sheep)
     keepInWorld(SpriteKind.Chicken)
     keepInWorld(SpriteKind.Horse)
+    keepInWorld(SpriteKind.Enderman)
 })
 
 // Little grass tufts and flowers, so you can see yourself moving.
@@ -1185,12 +1190,87 @@ game.onUpdateInterval(1000, function () {
 })
 
 
+// ===== THE ENDERMAN =====
+// Comes in the day or at night. It wanders and leaves you alone, until
+// you hit it: then it chases you. Four hits and it drops an ender pearl.
+function spawnEnderman () {
+    let ender = sprites.create(img`
+        . . . . . f f f f f f . . . . .
+        . . . . . f f f f f f . . . . .
+        . . . . . f a a f a a . . . . .
+        . . . . . f f f f f f . . . . .
+        . . . . . f f f f f f . . . . .
+        . . . . . . . f f . . . . . . .
+        . . . f f f f f f f f f f . . .
+        . . f f . f f f f f f . f f . .
+        . . f . . f f f f f f . . f . .
+        . . f . . f f f f f f . . f . .
+        . . f . . . f f f f . . . f . .
+        . . f . . . f . . f . . . f . .
+        . . . . . . f . . f . . . . . .
+        . . . . . . f . . f . . . . . .
+        . . . . . . f . . f . . . . . .
+        . . . . . f f . . f f . . . . .
+        `, SpriteKind.Enderman)
+    placeOnGrass(ender)
+}
+
+sprites.onOverlap(SpriteKind.Player, SpriteKind.Enderman, function (sprite, otherSprite) {
+    if (angryEnders.indexOf(otherSprite) >= 0) {
+        hurt(1)
+        knockBack(otherSprite)
+    }
+})
+
+// ===== ENDER PEARL =====
+// Throw it from the menu: you jump to a random spot nearby (never into a
+// wall or the sea) and it costs a heart.
+function teleport () {
+    let map = game.currentScene().tileMap
+    for (let tries = 0; tries < 20; tries++) {
+        let angle = randint(0, 359) * Math.PI / 180
+        let distance = randint(PEARL_DISTANCE / 2, PEARL_DISTANCE)
+        let x = Math.constrain(hero.x + Math.cos(angle) * distance, 8, WORLD_WIDTH - 8)
+        let y = Math.constrain(hero.y + Math.sin(angle) * distance, 8, WORLD_HEIGHT - 8)
+        // Near the world's edge the spot can get squashed back toward you.
+        // It has to be a real jump.
+        let clear = Math.abs(x - hero.x) + Math.abs(y - hero.y) >= PEARL_DISTANCE / 2
+        for (let corner = 0; corner < 4; corner++) {
+            let cx = x - 7
+            let cy = y - 7
+            if (corner % 2 == 1) {
+                cx = x + 7
+            }
+            if (corner >= 2) {
+                cy = y + 7
+            }
+            let col = cx >> 4
+            let row = cy >> 4
+            if (map.isObstacle(col, row) || map.getTileIndex(col, row) == WATER) {
+                clear = false
+            }
+        }
+        if (clear) {
+            hero.startEffect(effects.coolRadial, 300)
+            hero.setPosition(x, y)
+            hero.startEffect(effects.coolRadial, 300)
+            info.changeLifeBy(-1)
+            hero.sayText("Whoosh!", 600, false)
+            return true
+        }
+    }
+    hero.sayText("Nowhere to land", 800, false)
+    return false
+}
+
 // ===== PUNCHING =====
 // How many punches a block needs depends on its kind, and on your pickaxe.
 function hitsNeeded (block: Sprite) {
     let needed = TREE_HITS
     if (block.kind() == SpriteKind.Zombie) {
         needed = ZOMBIE_HITS
+    } else if (block.kind() == SpriteKind.Enderman) {
+        needed = ENDER_HITS
     } else if (isMob(block)) {
         needed = MOB_HITS
     } else if (isAnimal(block)) {
@@ -1216,7 +1296,12 @@ function hitsNeeded (block: Sprite) {
 }
 
 function collect (block: Sprite) {
-    if (isMob(block)) {
+    if (block.kind() == SpriteKind.Enderman) {
+        info.changeScoreBy(1)
+        pearls += 1
+        angryEnders.removeElement(block)
+        hero.sayText("An ender pearl!", 1000, false)
+    } else if (isMob(block)) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
         wool += 1
@@ -1269,6 +1354,10 @@ function punch (block: Sprite) {
         }
         hitsSoFar += 1
         block.startEffect(effects.spray, 150)
+        if (block.kind() == SpriteKind.Enderman && angryEnders.indexOf(block) < 0) {
+            angryEnders.push(block)
+            block.follow(hero, ENDER_SPEED)
+        }
         if (hitsSoFar >= hitsNeeded(block)) {
             collect(block)
         }
@@ -1354,6 +1443,11 @@ function findTarget () {
     for (let skeleton of sprites.allOfKind(SpriteKind.Skeleton)) {
         if (inReach(skeleton)) {
             target = skeleton
+        }
+    }
+    for (let ender of sprites.allOfKind(SpriteKind.Enderman)) {
+        if (inReach(ender)) {
+            target = ender
         }
     }
 }
@@ -1549,11 +1643,17 @@ let lightFurnace = false
 let atTable = false
 let atFurnace = false
 let houseOk = false
+// Hearts when the menu opened (the menu can't see your hearts).
+let livesAtOpen = 0
+let throwPearl = false
 
 function recipeList () {
     let list: string[] = []
     if (goldenApples > 0) {
         list.push("Eat golden apple")
+    }
+    if (pearls > 0) {
+        list.push("Ender pearl")
     }
     if (!(hasTable)) {
         list.push("Table")
@@ -1637,6 +1737,11 @@ function recipeCost (name: string) {
         return "8 gold + 1 apple"
     } else if (name == "Eat golden apple") {
         return "+" + GOLDEN_APPLE_HEARTS + " hearts (have " + goldenApples + ")"
+    } else if (name == "Ender pearl") {
+        if (livesAtOpen < 2) {
+            return "1 heart: you only have 1"
+        }
+        return "1 heart, jump away (have " + pearls + ")"
     } else if (name == "Smelt gold" || name == "Smelt glass") {
         if (smeltLeft > 0) {
             return "Furnace busy: " + smeltLeft + "s"
@@ -1682,6 +1787,8 @@ function canCraft (name: string) {
         return gold >= 8 && apples >= 1
     } else if (name == "Eat golden apple") {
         return goldenApples > 0
+    } else if (name == "Ender pearl") {
+        return pearls > 0 && livesAtOpen >= 2
     } else if (name == "Smelt gold") {
         return smeltLeft <= 0 && coal >= 1 && rawGold >= 1
     } else if (name == "Smelt glass") {
@@ -1802,6 +1909,9 @@ function craft (name: string) {
         apples += -1
         goldenApples += 1
         craftMessage = "A golden apple!"
+    } else if (name == "Ender pearl") {
+        // The jump happens once the menu closes and the world is back.
+        throwPearl = true
     } else if (name == "Eat golden apple") {
         goldenApples += -1
         heartsToAdd += GOLDEN_APPLE_HEARTS
@@ -1949,6 +2059,13 @@ function placeCrafted () {
         info.changeLifeBy(heartsToAdd)
         heartsToAdd = 0
     }
+    if (throwPearl) {
+        throwPearl = false
+        // A pearl is only used up if there was somewhere to land.
+        if (teleport()) {
+            pearls += -1
+        }
+    }
     if (lightFurnace) {
         lightFurnace = false
         for (let furnace of sprites.allOfKind(SpriteKind.Furnace)) {
@@ -1965,6 +2082,8 @@ function openCraftMenu () {
     atTable = nearTable()
     atFurnace = nearFurnace()
     houseOk = houseFits()
+    livesAtOpen = info.life()
+    throwPearl = false
     menuItems = recipeList()
     menuPick = 0
     menuTop = 0
@@ -2012,7 +2131,7 @@ function makePick () {
         return
     }
     craft(name)
-    if (name == "Table" || name == "Eat golden apple") {
+    if (name == "Table" || name == "Eat golden apple" || name == "Ender pearl") {
         closeCraftMenu()
         return
     }
@@ -2161,6 +2280,11 @@ function startTheGame () {
         wanderAll(SpriteKind.Sheep)
         wanderAll(SpriteKind.Chicken)
         wanderAll(SpriteKind.Horse)
+        for (let ender of sprites.allOfKind(SpriteKind.Enderman)) {
+            if (angryEnders.indexOf(ender) < 0) {
+                ender.setVelocity(randint(-ANIMAL_SPEED, ANIMAL_SPEED), randint(-ANIMAL_SPEED, ANIMAL_SPEED))
+            }
+        }
     })
 
     game.onUpdateInterval(RESPAWN_MS, function () {
@@ -2173,6 +2297,13 @@ function startTheGame () {
     game.onUpdateInterval(ANIMAL_RESPAWN_MS, function () {
         if (animalCount() < MAX_ANIMALS) {
             spawnAnimal()
+        }
+    })
+
+    // Now and then an Enderman turns up, day or night. Only one at a time.
+    game.onUpdateInterval(ENDER_SPAWN_MS, function () {
+        if (sprites.allOfKind(SpriteKind.Enderman).length < 1 && Math.percentChance(ENDER_CHANCE)) {
+            spawnEnderman()
         }
     })
 
