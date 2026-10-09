@@ -1,4 +1,11 @@
-// BLOCK MUNCHER v7: THE FURNACE AND GOLD
+// BLOCK MUNCHER v8: A HOUSE WITH A DOOR
+// v8 ideas from Lincoln's notes:
+//   House: 20 wood + 10 glass, made at your table. It appears around you:
+//   plank walls, glass windows, a wood floor and a doorway.
+//   Door: 6 wood. It fits your doorway, opens when you walk up to it and
+//   shuts behind you. Monsters can't come in.
+//
+// v7: THE FURNACE AND GOLD
 // v7 ideas from Lincoln's notes:
 //   Coal ore (needs a pickaxe). A furnace costs 8 stone.
 //   At the furnace, 1 coal smelts raw gold into gold, or sand into glass.
