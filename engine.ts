@@ -1087,7 +1087,14 @@ function checkWin () {
 // ===== START THE GAME =====
 // Called by the "start the game" block at the end of main.ts, after
 // every knob has been set.
+let gameStarted = false
+
 function startTheGame () {
+    // Only start once, even if the start block gets copied or put in a loop.
+    if (gameStarted) {
+        return
+    }
+    gameStarted = true
     secondsLeft = DAY_SECONDS
     hero = sprites.create(img`
         . . . . e e e e e e e e . . . .
