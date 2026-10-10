@@ -1,4 +1,10 @@
-// BLOCK MUNCHER v9: THE ENDERMAN
+// BLOCK MUNCHER v10: SHEARS
+// v10 ideas from Lincoln's notes:
+//   Shears: 2 iron. Press A on a sheep: you get 2 wool and the sheep
+//   lives. Its wool grows back in the morning.
+//   A sheep you punch gives food as well as wool.
+//
+// v9: THE ENDERMAN
 // v9 ideas from Lincoln's notes:
 //   An Enderman turns up now and then, day or night. It leaves you alone
 //   until you hit it, then it chases you. 4 hits and it drops an ender
@@ -127,6 +133,7 @@ let SKELETON_SPEED = 20
 let ARROW_SPEED = 70
 let HURT_COOLDOWN_MS = 1000
 let REACH = 32
+let SHEAR_WOOL = 2
 let ENDER_HITS = 4
 let ENDER_SPAWN_MS = 20000
 let ENDER_CHANCE = 30
