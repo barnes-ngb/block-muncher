@@ -1237,6 +1237,9 @@ game.onUpdate(function () {
     }
     let heroSwimming = tileUnder(hero) == WATER
     for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
+        // Stay inside the world (the sea is on the right edge).
+        drowned.x = Math.constrain(drowned.x, 8, WORLD_WIDTH - 8)
+        drowned.y = Math.constrain(drowned.y, 8, WORLD_HEIGHT - 8)
         let inWater = tileUnder(drowned) == WATER
         let speed = DROWNED_SPEED
         if (inWater) {
