@@ -59,6 +59,10 @@ let hasGoldArmor = false
 let hasHouse = false
 let hasDoor = false
 let pearls = 0
+let hasShears = false
+// Sheep you have sheared. Their wool grows back every morning.
+let shearedSheep: Sprite[] = []
+let sheepLook: Image = null
 // Endermen you have hit. They chase you; the others just wander.
 let angryEnders: Sprite[] = []
 // What the furnace is cooking, how many, and how many seconds are left.
@@ -839,6 +843,7 @@ function spawnAnimal () {
             . . . . . . . . . . . . . . . .
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Sheep)
+        sheepLook = animal.image
     } else if (roll == 5) {
         animal = sprites.create(img`
             . . . . . . . . . . . . . . . .
@@ -1164,6 +1169,7 @@ function startDay () {
     day += 1
     tiles.setCurrentTilemap(dayMap)
     fillHoles()
+    regrowWool()
     game.splash("Good morning!", "Day " + day)
     updateHud()
 }
@@ -1304,8 +1310,15 @@ function collect (block: Sprite) {
     } else if (isMob(block)) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
-        wool += 1
-        hero.sayText("+1 wool", 600, false)
+        // A sheep gives food, and wool too if it still has its wool.
+        food += 1
+        if (shearedSheep.indexOf(block) < 0) {
+            wool += 1
+            hero.sayText("+1 wool +1 food", 600, false)
+        } else {
+            shearedSheep.removeElement(block)
+            hero.sayText("+1 food", 600, false)
+        }
     } else if (block.kind() == SpriteKind.Horse) {
         leather += 1
         hero.sayText("+1 leather", 600, false)
@@ -1342,11 +1355,34 @@ function collect (block: Sprite) {
     updateHud()
 }
 
+// Shears take the wool and the sheep lives. Its wool grows back in the
+// morning. A sheared sheep can still be punched for food.
+function shear (sheep: Sprite) {
+    wool += SHEAR_WOOL
+    shearedSheep.push(sheep)
+    let bare = sheep.image.clone()
+    bare.replace(1, 13)
+    sheep.setImage(bare)
+    hero.sayText("+" + SHEAR_WOOL + " wool", 600, false)
+    updateHud()
+}
+
+function regrowWool () {
+    for (let sheep of shearedSheep) {
+        if (sheepLook != null) {
+            sheep.setImage(sheepLook)
+        }
+    }
+    shearedSheep = []
+}
+
 function punch (block: Sprite) {
     if ((block.kind() == SpriteKind.Iron || block.kind() == SpriteKind.Coal) && !(hasPickaxe)) {
         hero.sayText("Need a pickaxe!", 1000, false)
     } else if (block.kind() == SpriteKind.Gold && !(hasIronPickaxe)) {
         hero.sayText("Need an iron pickaxe!", 1000, false)
+    } else if (block.kind() == SpriteKind.Sheep && hasShears && shearedSheep.indexOf(block) < 0) {
+        shear(block)
     } else {
         if (block != lastTarget) {
             lastTarget = block
@@ -1673,6 +1709,9 @@ function recipeList () {
         if (!(hasShovel)) {
             list.push("Shovel")
         }
+        if (!(hasShears)) {
+            list.push("Shears")
+        }
         if (!(hasFurnace)) {
             list.push("Furnace")
         }
@@ -1708,6 +1747,8 @@ function recipeCost (name: string) {
         return "2 wood + 3 stone"
     } else if (name == "Iron pickaxe") {
         return "3 iron + 2 wood"
+    } else if (name == "Shears") {
+        return "2 iron"
     } else if (name == "Shovel") {
         return "1 stone + 2 wood"
     } else if (name == "Armor") {
@@ -1761,6 +1802,8 @@ function canCraft (name: string) {
         return wood >= 2 && stone >= 3
     } else if (name == "Iron pickaxe") {
         return iron >= 3 && wood >= 2
+    } else if (name == "Shears") {
+        return iron >= 2
     } else if (name == "Shovel") {
         return stone >= 1 && wood >= 2
     } else if (name == "Armor") {
@@ -1813,6 +1856,10 @@ function craft (name: string) {
         wood += -2
         hasIronPickaxe = true
         craftMessage = "Now I can mine gold!"
+    } else if (name == "Shears") {
+        iron += -2
+        hasShears = true
+        craftMessage = "Press A on a sheep to shear it"
     } else if (name == "Shovel") {
         stone += -1
         wood += -2
