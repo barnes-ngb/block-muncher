@@ -19,6 +19,7 @@ namespace SpriteKind {
     export const Coal = SpriteKind.create()
     export const Furnace = SpriteKind.create()
     export const Enderman = SpriteKind.create()
+    export const Drowned = SpriteKind.create()
     export const Bed = SpriteKind.create()
     export const Zombie = SpriteKind.create()
     export const Spider = SpriteKind.create()
@@ -519,7 +520,7 @@ function clearHouseSpot (c: number, r: number) {
             placeOnGrass(critter)
         }
     }
-    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman))) {
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman)).concat(sprites.allOfKind(SpriteKind.Drowned))) {
         if (inHouseWall(mob, c, r) || inHouse(mob, c, r)) {
             placeOnGrass(mob)
         }
@@ -560,7 +561,7 @@ function updateDoor () {
     let near = Math.abs(hero.x - doorX) < 24 && Math.abs(hero.y - doorY) < 28
     // Mobs can't open it: any mob in the doorway or inside gets put back
     // outside, just below the door.
-    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman))) {
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman)).concat(sprites.allOfKind(SpriteKind.Drowned))) {
         let inDoorway = Math.abs(mob.x - doorX) < 16 && Math.abs(mob.y - doorY) < 16
         if (inDoorway || inHouse(mob, houseCol, houseRow)) {
             mob.setPosition(doorX, Math.min(doorY + 24, WORLD_HEIGHT - 8))
@@ -1196,6 +1197,71 @@ game.onUpdateInterval(1000, function () {
 })
 
 
+// ===== THE DROWNED =====
+// A zombie that lives in the sea. It is fast in the water and slow on
+// land. In the day it stays in the water and only comes for you if you
+// swim. At night it climbs out and chases you on land too.
+function spawnDrowned () {
+    let map = game.currentScene().tileMap
+    for (let tries = 0; tries < 20; tries++) {
+        let col = randint(seaLeft >> 4, Math.idiv(WORLD_WIDTH, 16) - 1)
+        let row = randint(0, Math.idiv(WORLD_HEIGHT, 16) - 1)
+        if (map.getTileIndex(col, row) == WATER) {
+            let drowned = sprites.create(img`
+                . . . . 6 6 6 6 6 6 6 6 . . . .
+                . . . . 6 6 6 6 6 6 6 6 . . . .
+                . . . . 6 9 6 6 6 6 9 6 . . . .
+                . . . . 6 9 9 6 6 9 9 6 . . . .
+                . . . . 6 6 6 6 6 6 6 6 . . . .
+                . . . . 6 6 c c c c 6 6 . . . .
+                . . . . 6 6 6 6 6 6 6 6 . . . .
+                . . . . . . 6 6 6 6 . . . . . .
+                . . 8 8 8 8 8 8 8 8 8 8 8 8 . .
+                . . 6 6 8 8 8 8 8 8 8 8 6 6 . .
+                . . 6 6 8 8 8 8 8 8 8 8 6 6 . .
+                . . 6 6 8 8 8 8 8 8 8 8 6 6 . .
+                . . . . c c c c c c c c . . . .
+                . . . . c c c . . c c c . . . .
+                . . . . c c c . . c c c . . . .
+                . . . . 6 6 6 . . 6 6 6 . . . .
+                `, SpriteKind.Drowned)
+            drowned.setPosition(col * 16 + 8, row * 16 + 8)
+            return
+        }
+    }
+}
+
+game.onUpdate(function () {
+    if (!(gameStarted)) {
+        return
+    }
+    let heroSwimming = tileUnder(hero) == WATER
+    for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
+        let inWater = tileUnder(drowned) == WATER
+        let speed = DROWNED_SPEED
+        if (inWater) {
+            speed = DROWNED_SWIM_SPEED
+        }
+        if (isNight || heroSwimming) {
+            // Coming for you.
+            let dx = hero.x - drowned.x
+            let dy = hero.y - drowned.y
+            let distance = Math.max(1, Math.sqrt(dx * dx + dy * dy))
+            drowned.vx = dx / distance * speed
+            drowned.vy = dy / distance * speed
+        } else if (!(inWater)) {
+            // Daytime on land: walk back to the sea (it is on the right).
+            drowned.vx = speed
+            drowned.vy = 0
+        }
+    }
+})
+
+sprites.onOverlap(SpriteKind.Player, SpriteKind.Drowned, function (sprite, otherSprite) {
+    hurt(1)
+    knockBack(otherSprite)
+})
+
 // ===== THE ENDERMAN =====
 // Comes in the day or at night. It wanders and leaves you alone, until
 // you hit it: then it chases you. Four hits and it drops an ender pearl.
@@ -1277,6 +1343,8 @@ function hitsNeeded (block: Sprite) {
         needed = ZOMBIE_HITS
     } else if (block.kind() == SpriteKind.Enderman) {
         needed = ENDER_HITS
+    } else if (block.kind() == SpriteKind.Drowned) {
+        needed = DROWNED_HITS
     } else if (isMob(block)) {
         needed = MOB_HITS
     } else if (isAnimal(block)) {
@@ -1307,7 +1375,7 @@ function collect (block: Sprite) {
         pearls += 1
         angryEnders.removeElement(block)
         hero.sayText("An ender pearl!", 1000, false)
-    } else if (isMob(block)) {
+    } else if (isMob(block) || block.kind() == SpriteKind.Drowned) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
         // A sheep gives food, and wool too if it still has its wool.
@@ -1484,6 +1552,11 @@ function findTarget () {
     for (let ender of sprites.allOfKind(SpriteKind.Enderman)) {
         if (inReach(ender)) {
             target = ender
+        }
+    }
+    for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
+        if (inReach(drowned)) {
+            target = drowned
         }
     }
 }
@@ -2327,6 +2400,12 @@ function startTheGame () {
         wanderAll(SpriteKind.Sheep)
         wanderAll(SpriteKind.Chicken)
         wanderAll(SpriteKind.Horse)
+        // Drowned paddle about in the sea when they aren't chasing you.
+        for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
+            if (!(isNight) && tileUnder(drowned) == WATER) {
+                drowned.setVelocity(randint(0 - DROWNED_SWIM_SPEED, DROWNED_SWIM_SPEED) / 2, randint(0 - DROWNED_SWIM_SPEED, DROWNED_SWIM_SPEED) / 2)
+            }
+        }
         for (let ender of sprites.allOfKind(SpriteKind.Enderman)) {
             if (angryEnders.indexOf(ender) < 0) {
                 ender.setVelocity(randint(-ANIMAL_SPEED, ANIMAL_SPEED), randint(-ANIMAL_SPEED, ANIMAL_SPEED))
@@ -2344,6 +2423,13 @@ function startTheGame () {
     game.onUpdateInterval(ANIMAL_RESPAWN_MS, function () {
         if (animalCount() < MAX_ANIMALS) {
             spawnAnimal()
+        }
+    })
+
+    // Drowned come up out of the sea, day or night.
+    game.onUpdateInterval(DROWNED_SPAWN_MS, function () {
+        if (seaLeft < WORLD_WIDTH && sprites.allOfKind(SpriteKind.Drowned).length < MAX_DROWNED) {
+            spawnDrowned()
         }
     })
 

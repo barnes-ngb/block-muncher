@@ -1,8 +1,11 @@
-// BLOCK MUNCHER v10: SHEARS
+// BLOCK MUNCHER v10: SHEARS AND THE DROWNED
 // v10 ideas from Lincoln's notes:
 //   Shears: 2 iron. Press A on a sheep: you get 2 wool and the sheep
 //   lives. Its wool grows back in the morning.
 //   A sheep you punch gives food as well as wool.
+//   The Drowned live in the sea. They are fast in the water and slow on
+//   land. In the day they stay in the water and only attack if you swim.
+//   At night they come out of the water and chase you.
 //
 // v9: THE ENDERMAN
 // v9 ideas from Lincoln's notes:
@@ -134,6 +137,11 @@ let ARROW_SPEED = 70
 let HURT_COOLDOWN_MS = 1000
 let REACH = 32
 let SHEAR_WOOL = 2
+let MAX_DROWNED = 3
+let DROWNED_SPAWN_MS = 10000
+let DROWNED_HITS = 3
+let DROWNED_SPEED = 20
+let DROWNED_SWIM_SPEED = 50
 let ENDER_HITS = 4
 let ENDER_SPAWN_MS = 20000
 let ENDER_CHANCE = 30
