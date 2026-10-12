@@ -1,4 +1,14 @@
-// BLOCK MUNCHER v10: SHEARS AND THE DROWNED
+// BLOCK MUNCHER v11: TNT
+// v11 ideas from Lincoln's notes:
+//   Creepers drop gunpowder when you beat them.
+//   Gravel turns up on land and in the water. Dig it with an iron shovel
+//   (1 iron + 2 wood) to get flint.
+//   Flint and steel: 1 flint + 1 iron.
+//   TNT: 5 gunpowder + 4 sand. Place it from the menu, then press A on it
+//   with flint and steel. You have 3 seconds to run! Every monster in the
+//   blast is beaten in one go. If you're too close, you lose a heart.
+//
+// v10: SHEARS AND THE DROWNED
 // v10 ideas from Lincoln's notes:
 //   Shears: 2 iron. Press A on a sheep: you get 2 wool and the sheep
 //   lives. Its wool grows back in the morning.
@@ -142,6 +152,13 @@ let DROWNED_SPAWN_MS = 10000
 let DROWNED_HITS = 3
 let DROWNED_SPEED = 20
 let DROWNED_SWIM_SPEED = 50
+let MAX_GRAVEL = 6
+let GRAVEL_RESPAWN_MS = 15000
+let GRAVEL_HITS = 2
+let GUNPOWDER_FOR_TNT = 5
+let SAND_FOR_TNT = 4
+let TNT_FUSE_MS = 3000
+let TNT_RADIUS = 40
 let ENDER_HITS = 4
 let ENDER_SPAWN_MS = 20000
 let ENDER_CHANCE = 30

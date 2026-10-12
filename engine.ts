@@ -20,6 +20,8 @@ namespace SpriteKind {
     export const Furnace = SpriteKind.create()
     export const Enderman = SpriteKind.create()
     export const Drowned = SpriteKind.create()
+    export const Gravel = SpriteKind.create()
+    export const TNT = SpriteKind.create()
     export const Bed = SpriteKind.create()
     export const Zombie = SpriteKind.create()
     export const Spider = SpriteKind.create()
@@ -63,6 +65,14 @@ let pearls = 0
 let hasShears = false
 // Sheep you have sheared. Their wool grows back every morning.
 let shearedSheep: Sprite[] = []
+let gunpowder = 0
+let flint = 0
+let tnt = 0
+let hasIronShovel = false
+let hasFlintSteel = false
+// TNT that is lit, and when it was lit.
+let litTnt: Sprite[] = []
+let litAt: number[] = []
 let sheepLook: Image = null
 // Endermen you have hit. They chase you; the others just wander.
 let angryEnders: Sprite[] = []
@@ -510,7 +520,7 @@ function buildHouse () {
 // and mobs move out of the whole house, and your table, box, bed or
 // furnace moves inside.
 function clearHouseSpot (c: number, r: number) {
-    for (let thing of sprites.allOfKind(SpriteKind.Tree).concat(sprites.allOfKind(SpriteKind.Stone)).concat(sprites.allOfKind(SpriteKind.Iron)).concat(sprites.allOfKind(SpriteKind.Gold)).concat(sprites.allOfKind(SpriteKind.Coal))) {
+    for (let thing of sprites.allOfKind(SpriteKind.Tree).concat(sprites.allOfKind(SpriteKind.Stone)).concat(sprites.allOfKind(SpriteKind.Iron)).concat(sprites.allOfKind(SpriteKind.Gold)).concat(sprites.allOfKind(SpriteKind.Coal)).concat(sprites.allOfKind(SpriteKind.Gravel))) {
         if (inHouseWall(thing, c, r)) {
             thing.destroy()
         }
@@ -526,7 +536,7 @@ function clearHouseSpot (c: number, r: number) {
         }
     }
     let spot = 0
-    for (let stuff of sprites.allOfKind(SpriteKind.Table).concat(sprites.allOfKind(SpriteKind.Box)).concat(sprites.allOfKind(SpriteKind.Bed)).concat(sprites.allOfKind(SpriteKind.Furnace))) {
+    for (let stuff of sprites.allOfKind(SpriteKind.Table).concat(sprites.allOfKind(SpriteKind.Box)).concat(sprites.allOfKind(SpriteKind.Bed)).concat(sprites.allOfKind(SpriteKind.Furnace)).concat(sprites.allOfKind(SpriteKind.TNT))) {
         if (inHouseWall(stuff, c, r)) {
             // The floor corners, then the middle of each side.
             let spotCols = [c - 1, c + 1, c - 1, c + 1, c, c - 1, c + 1, c]
@@ -1197,6 +1207,111 @@ game.onUpdateInterval(1000, function () {
 })
 
 
+// ===== GRAVEL =====
+// Grey piles on land and in the sea. Dig one with an iron shovel for flint.
+function spawnGravel () {
+    let pile = sprites.create(img`
+        . . . . . . . . . . . . . . . .
+        . . . . . . . . . . . . . . . .
+        . . . . . . . . . . . . . . . .
+        . . . . . . . . . . . . . . . .
+        . . . . . . b b b b . . . . . .
+        . . . . . b d b c b b . . . . .
+        . . . . b b c b b d b b . . . .
+        . . . b d b b b c b b c b . . .
+        . . b b c b d b b b d b b b . .
+        . . b b b c b b c b b c b d b .
+        . b d b b b b d b b b b c b b .
+        . b b c b d b b b c b d b b b b
+        b b b b b b c b b b b b b c b b
+        c c c c c c c c c c c c c c c c
+        . . . . . . . . . . . . . . . .
+        . . . . . . . . . . . . . . . .
+        `, SpriteKind.Gravel)
+    let map = game.currentScene().tileMap
+    for (let tries = 0; tries < 20; tries++) {
+        let col = randint(0, Math.idiv(WORLD_WIDTH, 16) - 1)
+        let row = randint(0, Math.idiv(WORLD_HEIGHT, 16) - 1)
+        let tile = map.getTileIndex(col, row)
+        if (tile == GRASS || tile == WATER) {
+            pile.setPosition(col * 16 + 8, row * 16 + 8)
+            return
+        }
+    }
+    pile.destroy()
+}
+
+// ===== TNT =====
+// Place it from the menu, then press A on it with flint and steel.
+// You have TNT_FUSE_MS to run. Every monster in the blast is beaten,
+// and if you're still in it you lose a heart.
+function lightTnt (box: Sprite) {
+    if (litTnt.indexOf(box) >= 0) {
+        hero.sayText("RUN!", 600, false)
+    } else if (!(hasFlintSteel)) {
+        hero.sayText("Need flint and steel!", 1000, false)
+    } else {
+        litTnt.push(box)
+        litAt.push(game.runtime())
+        hero.sayText("RUN!", 1000, false)
+    }
+}
+
+// The blast is a circle TNT_RADIUS across from the middle of the TNT.
+function inBlast (who: Sprite, x: number, y: number) {
+    let dx = who.x - x
+    let dy = who.y - y
+    return dx * dx + dy * dy <= TNT_RADIUS * TNT_RADIUS
+}
+
+function explode (box: Sprite) {
+    let x = box.x
+    let y = box.y
+    box.destroy(effects.fire, 500)
+    scene.cameraShake(8, 500)
+    for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman)).concat(sprites.allOfKind(SpriteKind.Drowned))) {
+        if (inBlast(mob, x, y)) {
+            if (mob.kind() == SpriteKind.Creeper) {
+                gunpowder += 1
+            }
+            if (mob.kind() == SpriteKind.Enderman) {
+                angryEnders.removeElement(mob)
+            }
+            info.changeScoreBy(1)
+            mob.destroy(effects.fire, 300)
+        }
+    }
+    if (inBlast(hero, x, y)) {
+        info.changeLifeBy(-1)
+        hero.sayText("Too close!", 1000, false)
+    }
+    updateHud()
+}
+
+game.onUpdate(function () {
+    if (!(gameStarted)) {
+        return
+    }
+    let index = 0
+    while (index < litTnt.length) {
+        let box = litTnt[index]
+        let waited = game.runtime() - litAt[index]
+        if (waited >= TNT_FUSE_MS) {
+            litTnt.removeAt(index)
+            litAt.removeAt(index)
+            explode(box)
+        } else {
+            // Flash faster as it gets close.
+            let flashMs = 250
+            if (waited > TNT_FUSE_MS - 1000) {
+                flashMs = 100
+            }
+            box.setFlag(SpriteFlag.Invisible, Math.idiv(waited, flashMs) % 2 == 1)
+            index += 1
+        }
+    }
+})
+
 // ===== THE DROWNED =====
 // A zombie that lives in the sea. It is fast in the water and slow on
 // land. In the day it stays in the water and only comes for you if you
@@ -1348,6 +1463,8 @@ function hitsNeeded (block: Sprite) {
         needed = ENDER_HITS
     } else if (block.kind() == SpriteKind.Drowned) {
         needed = DROWNED_HITS
+    } else if (block.kind() == SpriteKind.Gravel) {
+        needed = GRAVEL_HITS
     } else if (isMob(block)) {
         needed = MOB_HITS
     } else if (isAnimal(block)) {
@@ -1378,6 +1495,13 @@ function collect (block: Sprite) {
         pearls += 1
         angryEnders.removeElement(block)
         hero.sayText("An ender pearl!", 1000, false)
+    } else if (block.kind() == SpriteKind.Creeper) {
+        info.changeScoreBy(1)
+        gunpowder += 1
+        hero.sayText("+1 gunpowder", 600, false)
+    } else if (block.kind() == SpriteKind.Gravel) {
+        flint += 1
+        hero.sayText("+1 flint", 600, false)
     } else if (isMob(block) || block.kind() == SpriteKind.Drowned) {
         info.changeScoreBy(1)
     } else if (block.kind() == SpriteKind.Sheep) {
@@ -1452,6 +1576,10 @@ function punch (block: Sprite) {
         hero.sayText("Need a pickaxe!", 1000, false)
     } else if (block.kind() == SpriteKind.Gold && !(hasIronPickaxe)) {
         hero.sayText("Need an iron pickaxe!", 1000, false)
+    } else if (block.kind() == SpriteKind.TNT) {
+        lightTnt(block)
+    } else if (block.kind() == SpriteKind.Gravel && !(hasIronShovel)) {
+        hero.sayText("Need an iron shovel!", 1000, false)
     } else if (block.kind() == SpriteKind.Sheep && hasShears && shearedSheep.indexOf(block) < 0) {
         shear(block)
     } else {
@@ -1560,6 +1688,17 @@ function findTarget () {
     for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
         if (inReach(drowned)) {
             target = drowned
+        }
+    }
+    for (let pile of sprites.allOfKind(SpriteKind.Gravel)) {
+        if (hero.overlapsWith(pile)) {
+            target = pile
+        }
+    }
+    // TNT comes last, so A on TNT lights it even with a block nearby.
+    for (let box of sprites.allOfKind(SpriteKind.TNT)) {
+        if (hero.overlapsWith(box)) {
+            target = box
         }
     }
 }
@@ -1758,6 +1897,8 @@ let houseOk = false
 // Hearts when the menu opened (the menu can't see your hearts).
 let livesAtOpen = 0
 let throwPearl = false
+// When the menu opened, so lit TNT doesn't burn down while it's open.
+let menuOpenedAt = 0
 
 function recipeList () {
     let list: string[] = []
@@ -1766,6 +1907,9 @@ function recipeList () {
     }
     if (pearls > 0) {
         list.push("Ender pearl")
+    }
+    if (tnt > 0) {
+        list.push("Place TNT")
     }
     if (!(hasTable)) {
         list.push("Table")
@@ -1788,6 +1932,13 @@ function recipeList () {
         if (!(hasShears)) {
             list.push("Shears")
         }
+        if (hasShovel && !(hasIronShovel)) {
+            list.push("Iron shovel")
+        }
+        if (!(hasFlintSteel)) {
+            list.push("Flint and steel")
+        }
+        list.push("TNT")
         if (!(hasFurnace)) {
             list.push("Furnace")
         }
@@ -1825,6 +1976,14 @@ function recipeCost (name: string) {
         return "3 iron + 2 wood"
     } else if (name == "Shears") {
         return "2 iron"
+    } else if (name == "Iron shovel") {
+        return "1 iron + 2 wood"
+    } else if (name == "Flint and steel") {
+        return "1 flint + 1 iron"
+    } else if (name == "TNT") {
+        return GUNPOWDER_FOR_TNT + " gunpowder+" + SAND_FOR_TNT + " sand"
+    } else if (name == "Place TNT") {
+        return "1 TNT (have " + tnt + ")"
     } else if (name == "Shovel") {
         return "1 stone + 2 wood"
     } else if (name == "Armor") {
@@ -1858,7 +2017,7 @@ function recipeCost (name: string) {
         if (livesAtOpen < 2) {
             return "1 heart: you only have 1"
         }
-        return "1 heart, jump away (have " + pearls + ")"
+        return "1 heart (have " + pearls + ")"
     } else if (name == "Smelt gold" || name == "Smelt glass") {
         if (smeltLeft > 0) {
             return "Furnace busy: " + smeltLeft + "s"
@@ -1880,6 +2039,14 @@ function canCraft (name: string) {
         return iron >= 3 && wood >= 2
     } else if (name == "Shears") {
         return iron >= 2
+    } else if (name == "Iron shovel") {
+        return iron >= 1 && wood >= 2
+    } else if (name == "Flint and steel") {
+        return flint >= 1 && iron >= 1
+    } else if (name == "TNT") {
+        return gunpowder >= GUNPOWDER_FOR_TNT && sand >= SAND_FOR_TNT
+    } else if (name == "Place TNT") {
+        return tnt > 0
     } else if (name == "Shovel") {
         return stone >= 1 && wood >= 2
     } else if (name == "Armor") {
@@ -1932,6 +2099,24 @@ function craft (name: string) {
         wood += -2
         hasIronPickaxe = true
         craftMessage = "Now I can mine gold!"
+    } else if (name == "Iron shovel") {
+        iron += -1
+        wood += -2
+        hasIronShovel = true
+        craftMessage = "Now I can dig gravel!"
+    } else if (name == "Flint and steel") {
+        flint += -1
+        iron += -1
+        hasFlintSteel = true
+        craftMessage = "Press A on TNT to light it"
+    } else if (name == "TNT") {
+        gunpowder += 0 - GUNPOWDER_FOR_TNT
+        sand += 0 - SAND_FOR_TNT
+        tnt += 1
+        craftMessage = "Place it from the menu"
+    } else if (name == "Place TNT") {
+        tnt += -1
+        toPlace.push("TNT")
     } else if (name == "Shears") {
         iron += -2
         hasShears = true
@@ -2109,6 +2294,25 @@ function placeCrafted () {
                 . e e . . . . . . . . . . e e .
                 . e e . . . . . . . . . . e e .
                 `, SpriteKind.Table)
+        } else if (name == "TNT") {
+            thing = sprites.create(img`
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 f f f 1 f 1 1 f 1 f f f 1 1 1
+                1 1 f 1 1 f f 1 f 1 1 f 1 1 1 1
+                1 1 f 1 1 f 1 f f 1 1 f 1 1 1 1
+                1 1 f 1 1 f 1 1 f 1 1 f 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
+                `, SpriteKind.TNT)
         } else if (name == "Furnace") {
             thing = sprites.create(img`
                 . b b b b b b b b b b b b b b .
@@ -2206,6 +2410,7 @@ function openCraftMenu () {
     atFurnace = nearFurnace()
     houseOk = houseFits()
     livesAtOpen = info.life()
+    menuOpenedAt = game.runtime()
     throwPearl = false
     menuItems = recipeList()
     menuPick = 0
@@ -2254,7 +2459,7 @@ function makePick () {
         return
     }
     craft(name)
-    if (name == "Table" || name == "Eat golden apple" || name == "Ender pearl") {
+    if (name == "Table" || name == "Eat golden apple" || name == "Ender pearl" || name == "Place TNT") {
         closeCraftMenu()
         return
     }
@@ -2270,18 +2475,23 @@ function closeCraftMenu () {
     }
     menuOpen = false
     game.popScene()
+    // The game was paused: give lit TNT back the time the menu was open.
+    let pausedFor = game.runtime() - menuOpenedAt
+    for (let index = 0; index < litAt.length; index++) {
+        litAt[index] = litAt[index] + pausedFor
+    }
     placeCrafted()
     updateHud()
     checkWin()
 }
 
 function drawMenu () {
-    // Keep the picked row on screen when the list is longer than 6.
+    // Keep the picked row on screen when the list is longer than 5.
     if (menuPick < menuTop) {
         menuTop = menuPick
     }
-    if (menuPick > menuTop + 5) {
-        menuTop = menuPick - 5
+    if (menuPick > menuTop + 4) {
+        menuTop = menuPick - 4
     }
     let pic = menuScreen.image
     pic.fill(15)
@@ -2290,18 +2500,19 @@ function drawMenu () {
     pic.print("Coal" + coal + " Gold" + gold + " Raw gold" + rawGold, 2, 16, 1, image.font5)
     pic.print("Sand" + sand + " Glass" + glass + " Food" + food, 2, 22, 1, image.font5)
     pic.print("Wool" + wool + " Lthr" + leather + " Apple" + apples, 2, 28, 1, image.font5)
-    pic.drawLine(0, 34, 159, 34, 11)
+    pic.print("Gunpowder" + gunpowder + " Flint" + flint + " TNT" + tnt, 2, 34, 1, image.font5)
+    pic.drawLine(0, 40, 159, 40, 11)
     if (menuItems.length == 0) {
-        pic.print("Nothing to make here.", 2, 40, 1)
-        pic.print("Stand at your table", 2, 54, 11)
-        pic.print("or your furnace.", 2, 64, 11)
+        pic.print("Nothing to make here.", 2, 46, 1)
+        pic.print("Stand at your table", 2, 60, 11)
+        pic.print("or your furnace.", 2, 70, 11)
         pic.print("B close", 2, 110, 11)
         return
     }
-    for (let row = 0; row < 6; row++) {
+    for (let row = 0; row < 5; row++) {
         let n = menuTop + row
         if (n < menuItems.length) {
-            let y = 37 + row * 10
+            let y = 44 + row * 10
             if (n == menuPick) {
                 pic.fillRect(0, y - 1, 160, 10, 8)
                 pic.print(">", 2, y, 5)
@@ -2314,10 +2525,10 @@ function drawMenu () {
         }
     }
     if (menuTop > 0) {
-        pic.print("^", 150, 37, 11)
+        pic.print("^", 150, 44, 11)
     }
-    if (menuTop + 6 < menuItems.length) {
-        pic.print("v", 150, 87, 11)
+    if (menuTop + 5 < menuItems.length) {
+        pic.print("v", 150, 84, 11)
     }
     if (menuNote != "") {
         pic.print(menuNote, 2, 99, 7)
@@ -2426,6 +2637,16 @@ function startTheGame () {
     game.onUpdateInterval(ANIMAL_RESPAWN_MS, function () {
         if (animalCount() < MAX_ANIMALS) {
             spawnAnimal()
+        }
+    })
+
+    // Gravel turns up on land and in the sea.
+    for (let index = 0; index < MAX_GRAVEL; index++) {
+        spawnGravel()
+    }
+    game.onUpdateInterval(GRAVEL_RESPAWN_MS, function () {
+        if (sprites.allOfKind(SpriteKind.Gravel).length < MAX_GRAVEL) {
+            spawnGravel()
         }
     })
 
