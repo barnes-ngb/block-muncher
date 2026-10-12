@@ -1257,13 +1257,20 @@ function lightTnt (box: Sprite) {
     }
 }
 
+// The blast is a circle TNT_RADIUS across from the middle of the TNT.
+function inBlast (who: Sprite, x: number, y: number) {
+    let dx = who.x - x
+    let dy = who.y - y
+    return dx * dx + dy * dy <= TNT_RADIUS * TNT_RADIUS
+}
+
 function explode (box: Sprite) {
     let x = box.x
     let y = box.y
     box.destroy(effects.fire, 500)
     scene.cameraShake(8, 500)
     for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman)).concat(sprites.allOfKind(SpriteKind.Drowned))) {
-        if (Math.abs(mob.x - x) <= TNT_RADIUS && Math.abs(mob.y - y) <= TNT_RADIUS) {
+        if (inBlast(mob, x, y)) {
             if (mob.kind() == SpriteKind.Creeper) {
                 gunpowder += 1
             }
@@ -1274,7 +1281,7 @@ function explode (box: Sprite) {
             mob.destroy(effects.fire, 300)
         }
     }
-    if (Math.abs(hero.x - x) <= TNT_RADIUS && Math.abs(hero.y - y) <= TNT_RADIUS) {
+    if (inBlast(hero, x, y)) {
         info.changeLifeBy(-1)
         hero.sayText("Too close!", 1000, false)
     }
@@ -1890,6 +1897,8 @@ let houseOk = false
 // Hearts when the menu opened (the menu can't see your hearts).
 let livesAtOpen = 0
 let throwPearl = false
+// When the menu opened, so lit TNT doesn't burn down while it's open.
+let menuOpenedAt = 0
 
 function recipeList () {
     let list: string[] = []
@@ -2401,6 +2410,7 @@ function openCraftMenu () {
     atFurnace = nearFurnace()
     houseOk = houseFits()
     livesAtOpen = info.life()
+    menuOpenedAt = game.runtime()
     throwPearl = false
     menuItems = recipeList()
     menuPick = 0
@@ -2465,6 +2475,11 @@ function closeCraftMenu () {
     }
     menuOpen = false
     game.popScene()
+    // The game was paused: give lit TNT back the time the menu was open.
+    let pausedFor = game.runtime() - menuOpenedAt
+    for (let index = 0; index < litAt.length; index++) {
+        litAt[index] = litAt[index] + pausedFor
+    }
     placeCrafted()
     updateHud()
     checkWin()
