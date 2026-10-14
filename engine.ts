@@ -140,7 +140,8 @@ function canHear (who: Sprite) {
     if (who == null) {
         return true
     }
-    return Math.abs(who.x - scene.cameraProperty(CameraProperty.X)) <= 80 + HEAR_EXTRA && Math.abs(who.y - scene.cameraProperty(CameraProperty.Y)) <= 60 + HEAR_EXTRA
+    // Any part of it showing counts. The bottom 28 pixels are the text bar.
+    return who.right > scene.cameraProperty(CameraProperty.Left) - HEAR_EXTRA && who.left < scene.cameraProperty(CameraProperty.Right) + HEAR_EXTRA && who.bottom > scene.cameraProperty(CameraProperty.Top) - HEAR_EXTRA && who.top < scene.cameraProperty(CameraProperty.Bottom) - 28 + HEAR_EXTRA
 }
 
 // Play a sound, unless it's off screen or that kind is still playing.
