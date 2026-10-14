@@ -109,6 +109,82 @@ let target: Sprite = null
 let lastTarget: Sprite = null
 let hitsSoFar = 0
 
+// ===== SOUNDS =====
+// One small buzzer, one volume. A creature is only heard when it's on
+// screen (or HEAR_EXTRA pixels past the edge), and each kind of sound
+// plays one at a time, so five zombies make one groan, not five.
+let punchSound = music.melodyPlayable(music.thump)
+let breakSound = music.melodyPlayable(music.knock)
+let boomSound = music.melodyPlayable(music.bigCrash)
+let arrowSound = music.melodyPlayable(music.pewPew)
+let dingSound = music.melodyPlayable(music.baDing)
+let morningSound = music.melodyPlayable(music.powerUp)
+let nightSound = music.melodyPlayable(music.spooky)
+let pearlSound = music.melodyPlayable(music.beamUp)
+let hurtSound = music.createSoundEffect(WaveShape.Square, 400, 150, 200, 0, 200, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let chompSound = music.createSoundEffect(WaveShape.Square, 300, 150, 180, 0, 120, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let scrapeSound = music.createSoundEffect(WaveShape.Noise, 1200, 800, 120, 0, 120, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let splashSound = music.createSoundEffect(WaveShape.Noise, 2000, 300, 150, 0, 300, SoundExpressionEffect.None, InterpolationCurve.Curve)
+let fuseSound = music.createSoundEffect(WaveShape.Noise, 5000, 3000, 100, 60, 600, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let groanSound = music.createSoundEffect(WaveShape.Sawtooth, 180, 120, 150, 0, 600, SoundExpressionEffect.Vibrato, InterpolationCurve.Linear)
+let gurgleSound = music.createSoundEffect(WaveShape.Square, 220, 110, 120, 0, 500, SoundExpressionEffect.Tremolo, InterpolationCurve.Linear)
+let clickSound = music.createSoundEffect(WaveShape.Noise, 3000, 2000, 150, 0, 60, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let hissSound = music.createSoundEffect(WaveShape.Noise, 4000, 4000, 80, 150, 700, SoundExpressionEffect.None, InterpolationCurve.Linear)
+let warbleSound = music.createSoundEffect(WaveShape.Sine, 600, 300, 150, 0, 400, SoundExpressionEffect.Vibrato, InterpolationCurve.Linear)
+// When each kind of sound last played.
+let soundNames: string[] = []
+let soundTimes: number[] = []
+
+// Can you hear this sprite? Only if it's on screen.
+function canHear (who: Sprite) {
+    if (who == null) {
+        return true
+    }
+    // Any part of it showing counts. The bottom 28 pixels are the text bar.
+    return who.right > scene.cameraProperty(CameraProperty.Left) - HEAR_EXTRA && who.left < scene.cameraProperty(CameraProperty.Right) + HEAR_EXTRA && who.bottom > scene.cameraProperty(CameraProperty.Top) - HEAR_EXTRA && who.top < scene.cameraProperty(CameraProperty.Bottom) - 28 + HEAR_EXTRA
+}
+
+// Play a sound, unless it's off screen or that kind is still playing.
+// "who" is the sprite making it, or null for your own sounds.
+function playSound (sound: music.Playable, name: string, gapMs: number, who: Sprite) {
+    if (!(SOUND_ON) || !(canHear(who))) {
+        return
+    }
+    // control.millis() keeps counting in every scene (game.runtime() is
+    // each scene's own clock, and the menu is a separate scene).
+    let now = control.millis()
+    let index = soundNames.indexOf(name)
+    if (index < 0) {
+        soundNames.push(name)
+        soundTimes.push(now)
+    } else if (now - soundTimes[index] < gapMs) {
+        return
+    } else {
+        soundTimes[index] = now
+    }
+    music.play(sound, music.PlaybackMode.InBackground)
+}
+
+// Now and then, each kind of creature you can see makes its noise.
+function creatureSounds () {
+    creatureSound(SpriteKind.Zombie, groanSound, "zombie")
+    creatureSound(SpriteKind.Drowned, gurgleSound, "drowned")
+    creatureSound(SpriteKind.Spider, clickSound, "spider")
+    creatureSound(SpriteKind.Creeper, hissSound, "creeper")
+    creatureSound(SpriteKind.Enderman, warbleSound, "enderman")
+}
+
+function creatureSound (kind: number, sound: music.Playable, name: string) {
+    for (let creature of sprites.allOfKind(kind)) {
+        if (canHear(creature)) {
+            if (Math.percentChance(40)) {
+                playSound(sound, name, CREATURE_SOUND_MS, creature)
+            }
+            return
+        }
+    }
+}
+
 // ===== THE WORLD =====
 // The ground is a tilemap: grass, then a beach, then the ocean on the
 // right-hand side. The shoreline wiggles a little from row to row.
@@ -294,6 +370,7 @@ let nightMap: tiles.TileMapData = null
 let landRight = 0
 let seaLeft = 0
 let heroSpeed = 0
+let wasSwimming = false
 let digCol = -1
 let digRow = -1
 let digsSoFar = 0
@@ -374,9 +451,14 @@ function setHeroSpeed () {
     if (ridden != null) {
         speed = RIDE_SPEED
     }
-    if (tileUnder(hero) == WATER) {
+    let swimming = tileUnder(hero) == WATER
+    if (swimming) {
         speed = SWIM_SPEED
     }
+    if (swimming && !(wasSwimming)) {
+        playSound(splashSound, "splash", 500, null)
+    }
+    wasSwimming = swimming
     if (speed != heroSpeed) {
         heroSpeed = speed
         controller.moveSprite(hero, speed, speed)
@@ -394,6 +476,7 @@ function dig () {
         hero.sayText("I need a shovel", 800, false)
         return true
     }
+    playSound(scrapeSound, "dig", 100, null)
     if (col != digCol || row != digRow) {
         digCol = col
         digRow = row
@@ -1095,6 +1178,7 @@ function hurt (amount: number) {
         }
         if (damage > 0) {
             info.changeLifeBy(0 - damage)
+            playSound(hurtSound, "hurt", 300, null)
             scene.cameraShake(4, 200)
         }
     }
@@ -1118,6 +1202,7 @@ sprites.onOverlap(SpriteKind.Player, SpriteKind.Spider, function (sprite, otherS
 
 sprites.onOverlap(SpriteKind.Player, SpriteKind.Creeper, function (sprite, otherSprite) {
     otherSprite.destroy(effects.fire, 400)
+    playSound(boomSound, "boom", 300, null)
     scene.cameraShake(8, 400)
     lastHurt = 0
     hurt(2)
@@ -1150,6 +1235,7 @@ game.onUpdateInterval(2000, function () {
         let dy = hero.y - skeleton.y
         let distance = Math.sqrt(dx * dx + dy * dy)
         if (distance > 0) {
+            playSound(arrowSound, "arrow", 1000, skeleton)
             sprites.createProjectileFromSprite(img`
                 . . . . . . . .
                 . . . . . . . .
@@ -1169,6 +1255,7 @@ function startNight () {
     isNight = true
     secondsLeft = NIGHT_SECONDS
     tiles.setCurrentTilemap(nightMap)
+    playSound(nightSound, "night", 1000, null)
     game.splash("NIGHT " + day, "The mobs are coming!")
     updateHud()
 }
@@ -1181,6 +1268,7 @@ function startDay () {
     tiles.setCurrentTilemap(dayMap)
     fillHoles()
     regrowWool()
+    playSound(morningSound, "morning", 1000, null)
     game.splash("Good morning!", "Day " + day)
     updateHud()
 }
@@ -1252,6 +1340,7 @@ function lightTnt (box: Sprite) {
         hero.sayText("Need flint and steel!", 1000, false)
     } else {
         litTnt.push(box)
+        playSound(fuseSound, "fuse", 300, box)
         litAt.push(game.runtime())
         hero.sayText("RUN!", 1000, false)
     }
@@ -1267,6 +1356,7 @@ function inBlast (who: Sprite, x: number, y: number) {
 function explode (box: Sprite) {
     let x = box.x
     let y = box.y
+    playSound(boomSound, "boom", 300, box)
     box.destroy(effects.fire, 500)
     scene.cameraShake(8, 500)
     for (let mob of sprites.allOfKind(SpriteKind.Zombie).concat(sprites.allOfKind(SpriteKind.Spider)).concat(sprites.allOfKind(SpriteKind.Creeper)).concat(sprites.allOfKind(SpriteKind.Skeleton)).concat(sprites.allOfKind(SpriteKind.Enderman)).concat(sprites.allOfKind(SpriteKind.Drowned))) {
@@ -1446,6 +1536,7 @@ function teleport () {
             hero.startEffect(effects.coolRadial, 300)
             info.changeLifeBy(-1)
             hero.sayText("Whoosh!", 600, false)
+            playSound(pearlSound, "pearl", 300, null)
             return true
         }
     }
@@ -1544,6 +1635,7 @@ function collect (block: Sprite) {
         iron += 1
     }
     block.destroy()
+    playSound(breakSound, "break", 100, null)
     scene.cameraShake(2, 100)
     lastTarget = null
     hitsSoFar = 0
@@ -1589,6 +1681,10 @@ function punch (block: Sprite) {
         }
         hitsSoFar += 1
         block.startEffect(effects.spray, 150)
+        playSound(punchSound, "punch", 100, null)
+        if (block.kind() == SpriteKind.Enderman) {
+            playSound(warbleSound, "enderman", 300, block)
+        }
         if (block.kind() == SpriteKind.Enderman && angryEnders.indexOf(block) < 0) {
             angryEnders.push(block)
             block.follow(hero, ENDER_SPEED)
@@ -1861,6 +1957,7 @@ controller.B.onEvent(ControllerButtonEvent.Pressed, function () {
             apples += -1
         }
         info.changeLifeBy(1)
+        playSound(chompSound, "eat", 200, null)
     } else {
         // The menu updates the screen itself when it closes.
         openCraftMenu()
@@ -2223,6 +2320,7 @@ function craft (name: string) {
     } else if (name == "Eat golden apple") {
         goldenApples += -1
         heartsToAdd += GOLDEN_APPLE_HEARTS
+        playSound(chompSound, "eat", 200, null)
         craftMessage = "Yum! +" + GOLDEN_APPLE_HEARTS + " hearts"
     } else if (name == "Smelt gold") {
         smeltWhat = "gold"
@@ -2249,6 +2347,7 @@ function startSmelting () {
 
 function finishSmelting () {
     smeltLeft = 0
+    playSound(dingSound, "furnace", 100, null)
     if (smeltWhat == "gold") {
         gold += smeltCount
     } else {
@@ -2459,6 +2558,7 @@ function makePick () {
         return
     }
     craft(name)
+    playSound(dingSound, "craft", 100, null)
     if (name == "Table" || name == "Eat golden apple" || name == "Ender pearl" || name == "Place TNT") {
         closeCraftMenu()
         return
@@ -2475,7 +2575,9 @@ function closeCraftMenu () {
     }
     menuOpen = false
     game.popScene()
-    // The game was paused: give lit TNT back the time the menu was open.
+    // game.runtime() is the world scene's own clock and stops while the
+    // menu is open, so lit TNT already waits. This shift is a safety net
+    // and is normally 0.
     let pausedFor = game.runtime() - menuOpenedAt
     for (let index = 0; index < litAt.length; index++) {
         litAt[index] = litAt[index] + pausedFor
@@ -2566,6 +2668,7 @@ function startTheGame () {
     }
     gameStarted = true
     secondsLeft = DAY_SECONDS
+    music.setVolume(SOUND_VOLUME)
     buildWorld()
     hero = sprites.create(img`
         . . . . e e e e e e e e . . . .
@@ -2614,6 +2717,7 @@ function startTheGame () {
         wanderAll(SpriteKind.Sheep)
         wanderAll(SpriteKind.Chicken)
         wanderAll(SpriteKind.Horse)
+        creatureSounds()
         // Drowned paddle about in the sea when they aren't chasing you.
         for (let drowned of sprites.allOfKind(SpriteKind.Drowned)) {
             if (!(isNight) && tileUnder(drowned) == WATER) {
