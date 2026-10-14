@@ -370,6 +370,7 @@ let nightMap: tiles.TileMapData = null
 let landRight = 0
 let seaLeft = 0
 let heroSpeed = 0
+let wasSwimming = false
 let digCol = -1
 let digRow = -1
 let digsSoFar = 0
@@ -450,12 +451,14 @@ function setHeroSpeed () {
     if (ridden != null) {
         speed = RIDE_SPEED
     }
-    if (tileUnder(hero) == WATER) {
+    let swimming = tileUnder(hero) == WATER
+    if (swimming) {
         speed = SWIM_SPEED
     }
-    if (speed == SWIM_SPEED && heroSpeed != SWIM_SPEED) {
+    if (swimming && !(wasSwimming)) {
         playSound(splashSound, "splash", 500, null)
     }
+    wasSwimming = swimming
     if (speed != heroSpeed) {
         heroSpeed = speed
         controller.moveSprite(hero, speed, speed)
