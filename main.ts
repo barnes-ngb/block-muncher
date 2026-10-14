@@ -1,4 +1,13 @@
-// BLOCK MUNCHER v11: TNT
+// BLOCK MUNCHER v12: SOUNDS
+//   Punches, blocks breaking, getting hurt, eating, crafting, splashing,
+//   digging, the furnace, night and morning, TNT, arrows and the pearl.
+//   Zombies groan, Drowned gurgle, spiders click, creepers hiss and
+//   Endermen warble, but only when they're on screen, and only one of
+//   each kind at a time.
+//   SOUND_ON = false turns it all off. SOUND_VOLUME is 0 to 255.
+//   HEAR_EXTRA lets you hear creatures that many pixels off screen.
+//
+// v11: TNT
 // v11 ideas from Lincoln's notes:
 //   Creepers drop gunpowder when you beat them.
 //   Gravel turns up on land and in the water. Dig it with an iron shovel
@@ -159,6 +168,10 @@ let GUNPOWDER_FOR_TNT = 5
 let SAND_FOR_TNT = 4
 let TNT_FUSE_MS = 3000
 let TNT_RADIUS = 40
+let SOUND_ON = true
+let SOUND_VOLUME = 128
+let HEAR_EXTRA = 0
+let CREATURE_SOUND_MS = 3000
 let ENDER_HITS = 4
 let ENDER_SPAWN_MS = 20000
 let ENDER_CHANCE = 30
