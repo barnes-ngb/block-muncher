@@ -149,7 +149,9 @@ function playSound (sound: music.Playable, name: string, gapMs: number, who: Spr
     if (!(SOUND_ON) || !(canHear(who))) {
         return
     }
-    let now = game.runtime()
+    // control.millis() keeps counting in every scene (game.runtime() is
+    // each scene's own clock, and the menu is a separate scene).
+    let now = control.millis()
     let index = soundNames.indexOf(name)
     if (index < 0) {
         soundNames.push(name)
@@ -2569,7 +2571,9 @@ function closeCraftMenu () {
     }
     menuOpen = false
     game.popScene()
-    // The game was paused: give lit TNT back the time the menu was open.
+    // game.runtime() is the world scene's own clock and stops while the
+    // menu is open, so lit TNT already waits. This shift is a safety net
+    // and is normally 0.
     let pausedFor = game.runtime() - menuOpenedAt
     for (let index = 0; index < litAt.length; index++) {
         litAt[index] = litAt[index] + pausedFor
