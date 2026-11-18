@@ -1,0 +1,69 @@
+name: Block Muncher issue 14 preview proof
+
+on:
+  pull_request:
+    branches: [master]
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+
+jobs:
+  preview:
+    if: >-
+      github.repository == 'barnes-ngb/block-muncher' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.head_ref == 'pilot/issue-14-zombie-speed'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      BASE_SHA: d86ce0a1cee8c5792bd7bd3f02f16bcffa635b65
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.23.2'
+          package-manager-cache: false
+      - name: Verify the pilot scope
+        shell: bash
+        run: |
+          git diff --check "$BASE_SHA" HEAD
+          test "$(git diff --name-only "$BASE_SHA" HEAD)" = $'.github/workflows/issue-14-preview-proof.yml\nmain.ts'
+          grep -Fx 'let ZOMBIE_SPEED = 20' main.ts
+          git rev-parse HEAD
+      - name: Build with pinned Arcade tools
+        shell: bash
+        run: |
+          start=$SECONDS
+          toolchain="$RUNNER_TEMP/block-muncher-pxt"
+          mkdir "$toolchain"
+          npm install --prefix "$toolchain" --no-audit --no-fund --save-exact pxt@0.5.1 pxt-arcade@4.1.25
+          printf '{"targetdir":"pxt-arcade"}\n' > "$toolchain/node_modules/pxtcli.json"
+          ln -s "$toolchain/node_modules" node_modules
+          node_modules/.bin/pxt clean
+          node_modules/.bin/pxt install
+          node_modules/.bin/pxt build --cloud
+          printf 'Tool setup and build seconds: %s\n' "$((SECONDS - start))"
+      - name: Package playable preview
+        shell: bash
+        run: |
+          preview="$RUNNER_TEMP/block-muncher-preview"
+          mkdir "$preview"
+          cp -r assets/. "$preview/"
+          meta=$(head -n 1 assets/js/binary.js)
+          [[ "$meta" == '// meta='*'"targetVersion":"4.1.25"}' ]]
+          { printf '%s\n' "$meta"; cat built/debug/binary.js; } > "$preview/js/binary.js"
+          git rev-parse HEAD > "$preview/SOURCE_SHA.txt"
+          sha256sum built/debug/binary.js > "$preview/RAW_BINARY_SHA256.txt"
+          (cd "$preview"; sha256sum index.html js/loader.js js/binary.js) > "$preview/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: block-muncher-issue-14-preview
+          path: ${{ runner.temp }}/block-muncher-preview
+          if-no-files-found: error
+          retention-days: 7
