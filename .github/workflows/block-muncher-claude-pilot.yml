@@ -1,0 +1,119 @@
+name: Block Muncher Claude issue pilot
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: read
+
+defaults:
+  run:
+    shell: bash
+
+concurrency:
+  group: block-muncher-claude-pilot-14
+  cancel-in-progress: false
+
+jobs:
+  preview:
+    if: >-
+      github.repository == 'barnes-ngb/block-muncher' &&
+      github.ref == 'refs/heads/master' &&
+      github.run_attempt == 1 &&
+      github.event.issue.number == 14 &&
+      github.event.sender.id == 208273317 &&
+      github.event.label.name == 'claude-preview-pilot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+      BASELINE: d86ce0a1cee8c5792bd7bd3f02f16bcffa635b65
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the original issue and game baseline
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git diff --exit-code "$BASELINE" HEAD -- . \
+            ':(exclude).github/block-muncher-pilot.py' \
+            ':(exclude).github/workflows/block-muncher-claude-pilot.yml'
+          gh api --paginate --slurp repos/barnes-ngb/block-muncher/issues/14/events > "$RUNNER_TEMP/issue-label-history.json"
+          python3 .github/block-muncher-pilot.py prompt "$GITHUB_EVENT_PATH" \
+            "$RUNNER_TEMP/issue-label-history.json" "$RUNNER_TEMP/claude-prompt.txt"
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.23.2'
+          package-manager-cache: false
+      - name: Install pinned Claude Code
+        run: |
+          npm install --prefix "$RUNNER_TEMP/claude-cli" --no-audit --no-fund --save-exact @anthropic-ai/claude-code@2.1.319
+          mkdir "$RUNNER_TEMP/claude-work"
+      - name: Ask Claude for one proposal
+        timeout-minutes: 3
+        working-directory: ${{ runner.temp }}/claude-work
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DISABLE_TELEMETRY: '1'
+        run: |
+          if [[ -z "$ANTHROPIC_API_KEY" && -z "$CLAUDE_CODE_OAUTH_TOKEN" ]] ||
+             [[ -n "$ANTHROPIC_API_KEY" && -n "$CLAUDE_CODE_OAUTH_TOKEN" ]]; then
+            echo 'Configure exactly one Claude credential in this repository.'
+            exit 1
+          fi
+          if ! "$RUNNER_TEMP/claude-cli/node_modules/.bin/claude" -p \
+            --restricted --tools '' --setting-sources '' \
+            --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
+            --no-session-persistence --model sonnet --max-turns 1 --max-budget-usd 0.25 \
+            --output-format json < "$RUNNER_TEMP/claude-prompt.txt" \
+            > "$RUNNER_TEMP/claude-result.json" 2> "$RUNNER_TEMP/claude-stderr.txt"; then
+            echo 'Claude could not complete the proposal. Check the repository credential and provider availability.'
+            exit 1
+          fi
+      - name: Apply and verify the preview-only change
+        run: |
+          python3 .github/block-muncher-pilot.py apply "$RUNNER_TEMP/claude-result.json" \
+            main.ts "$RUNNER_TEMP/preview-main.ts"
+          cp "$RUNNER_TEMP/preview-main.ts" main.ts
+          git diff --check
+          test "$(git diff --name-only)" = main.ts
+      - name: Build with the known Arcade toolchain
+        run: |
+          toolchain="$RUNNER_TEMP/block-muncher-pxt"
+          npm install --prefix "$toolchain" --no-audit --no-fund --save-exact pxt@0.5.1 pxt-arcade@4.1.25
+          printf '{"targetdir":"pxt-arcade"}\n' > "$toolchain/node_modules/pxtcli.json"
+          ln -s "$toolchain/node_modules" node_modules
+          node_modules/.bin/pxt clean
+          node_modules/.bin/pxt install
+          node_modules/.bin/pxt build --cloud
+      - name: Package the playable preview and its provenance
+        run: |
+          preview="$RUNNER_TEMP/block-muncher-preview"
+          mkdir "$preview"
+          cp -r assets/. "$preview/"
+          meta=$(head -n 1 assets/js/binary.js)
+          [[ "$meta" == '// meta='*'"targetVersion":"4.1.25"}' ]]
+          { printf '%s\n' "$meta"; cat built/debug/binary.js; } > "$preview/js/binary.js"
+          printf 'issue=14\ngame_baseline=%s\nworkflow_commit=%s\nrun=%s\n' \
+            "$BASELINE" "$(git rev-parse HEAD)" "$GITHUB_RUN_ID" > "$preview/SOURCE.txt"
+          git diff -- main.ts > "$preview/PREVIEW.patch"
+          sha256sum main.ts built/debug/binary.js > "$preview/SOURCE_SHA256.txt"
+          (cd "$preview"; sha256sum index.html js/loader.js js/binary.js PREVIEW.patch) > "$preview/SHA256SUMS.txt"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: block-muncher-issue-14-claude-preview
+          path: ${{ runner.temp }}/block-muncher-preview
+          if-no-files-found: error
+          retention-days: 7
+      - name: Summarize the playtest
+        run: |
+          {
+            echo 'The preview zombie moves a little slower.'
+            echo 'Compare a zombie following you in both versions on a clear stretch.'
+            echo 'Check that it still follows you and covers less distance in the preview.'
+          } >> "$GITHUB_STEP_SUMMARY"
