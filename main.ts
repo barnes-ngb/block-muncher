@@ -6,6 +6,8 @@
 //   each kind at a time.
 //   SOUND_ON = false turns it all off. SOUND_VOLUME is 0 to 255.
 //   HEAR_EXTRA lets you hear creatures that many pixels off screen.
+//   Zombies start slower (ZOMBIE_SPEED) and get ZOMBIE_SPEED_PER_NIGHT
+//   faster each night, up to ZOMBIE_MAX_SPEED.
 //
 // v11: TNT
 // v11 ideas from Lincoln's notes:
@@ -148,7 +150,9 @@ let FIRST_NIGHT_MOBS = 3
 let NIGHT_SPAWN_MS = 4000
 let ZOMBIE_HITS = 3
 let MOB_HITS = 2
-let ZOMBIE_SPEED = 25
+let ZOMBIE_SPEED = 20
+let ZOMBIE_SPEED_PER_NIGHT = 2
+let ZOMBIE_MAX_SPEED = 30
 let SPIDER_SPEED = 45
 let CREEPER_SPEED = 30
 let SKELETON_SPEED = 20
