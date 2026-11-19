@@ -1025,7 +1025,9 @@ function spawnMob () {
             . . . c c c c . . c c c c . . .
             . . . . . . . . . . . . . . . .
             `, SpriteKind.Zombie)
-        mob.follow(hero, ZOMBIE_SPEED)
+        // Zombies start at ZOMBIE_SPEED and get ZOMBIE_SPEED_PER_NIGHT faster
+        // each night, up to ZOMBIE_MAX_SPEED.
+        mob.follow(hero, Math.min(ZOMBIE_MAX_SPEED, ZOMBIE_SPEED + ZOMBIE_SPEED_PER_NIGHT * (day - 1)))
     } else if (roll == 2) {
         mob = sprites.create(img`
             . . . . . . . . . . . . . . . .
