@@ -1,50 +1,96 @@
+# Block Muncher: turn one maintainer-approved game idea (issue label `kid-request`)
+# into one reviewable pull request. Nothing is merged or released automatically.
+#
+# Jobs and what each may touch:
+#   propose  read-only token + the provider secret (model step only). One model call.
+#   build    no secrets, read-only token. Builds the proposal on the pinned Arcade toolchain.
+#   validate no secrets, read-only token. Independent recheck of the saved build snapshot.
+#   publish  the only job with write permissions. Copies validated files, never runs them.
+#   status   issues:write only. Posts one fixed sentence when an admitted run does not publish.
+#
+# Hard model-call count: at most WEEKLY_MODEL_CALL_CAP model calls whose step started in the last
+# 7 days, counted by actual step start times from this workflow's earlier runs (paginated). The
+# run list reaches back 7 days + 24 hours by creation time, which covers the longest allowed gap
+# between run creation and a call (a run older than 1 hour never calls). Missing or inconsistent
+# timestamps, incomplete pagination, an unknown model-like step name or a still-running prior
+# model step hold the request. GitHub concurrency serializes runs, which is what makes "count,
+# then reserve the next call" safe.
+#
+# No queue: concurrency keeps one running and one *pending* run. A newer label event replaces an
+# older pending one, and that older run ends without any status. A held request (limit reached
+# or unverifiable, or the run waited too long) gets one fixed comment and is NOT queued. Relabeling
+# is refused by design (one labeled event per issue), so an owner must file a fresh issue after
+# the window resets, until a real queue/dispatch path replaces this stopgap.
+#
+# Estimated provider spend is a separate, softer number: calls-per-week x --max-budget-usd. The
+# CLI compares its own client-side price estimate (total_cost_usd) with that budget between turns;
+# one turn can overshoot it and the estimate is not provider billing. It is a guard rail, not a
+# hard dollar cap: check the provider console for the real number.
+#
+# Events and tokens: this runs on `issues: labeled`. A label applied by a workflow that uses
+# GITHUB_TOKEN does not start it (GitHub does not start runs from token-made events, except
+# workflow_dispatch and repository_dispatch), so only a person or a configured app/PAT label
+# starts it; that is intended. For the same reason the pull request this workflow opens does not
+# start other workflows. Every job declares its own permissions: `actions: read` lets the jobs
+# list runs and download artifacts with `gh run download`; uploads use the runner's own artifact
+# credential. Re-runs are refused in every job (run_attempt must be 1).
 name: Block Muncher Claude issue pilot
 
 on:
   issues:
     types: [labeled]
 
-permissions:
-  contents: read
-  issues: read
+permissions: {}
 
 defaults:
   run:
     shell: bash
 
 concurrency:
-  group: block-muncher-claude-pilot-14
+  group: block-muncher-claude-pilot
   cancel-in-progress: false
 
+env:
+  WEEKLY_MODEL_CALL_CAP: '5'
+  MAX_BUDGET_USD: '1.00'
+  # Optional repository variables. Leave the app bot variables unset until app filing exists.
+  BLOCK_MUNCHER_APP_BOT_ID: ${{ vars.BLOCK_MUNCHER_APP_BOT_ID }}
+  BLOCK_MUNCHER_APP_BOT_LOGIN: ${{ vars.BLOCK_MUNCHER_APP_BOT_LOGIN }}
+  BLOCK_MUNCHER_BLOCKED_TERMS: ${{ vars.BLOCK_MUNCHER_BLOCKED_TERMS }}
+
 jobs:
-  preview:
+  propose:
     if: >-
       github.repository == 'barnes-ngb/block-muncher' &&
-      github.ref == 'refs/heads/master' &&
+      github.event.repository.fork == false &&
+      github.ref == format('refs/heads/{0}', github.event.repository.default_branch) &&
       github.run_attempt == 1 &&
-      github.event.issue.number == 14 &&
-      github.event.sender.id == 208273317 &&
-      github.event.label.name == 'claude-preview-pilot'
+      github.event.action == 'labeled' &&
+      github.event.label.name == 'kid-request' &&
+      github.event.issue.state == 'open' &&
+      github.event.issue.pull_request == null
     runs-on: ubuntu-latest
-    timeout-minutes: 12
-    env:
-      PUPPETEER_SKIP_DOWNLOAD: 'true'
-      BASELINE: d86ce0a1cee8c5792bd7bd3f02f16bcffa635b65
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    outputs:
+      admitted: ${{ steps.final.outputs.admitted }}
+      outcome: ${{ steps.final.outputs.outcome }}
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
         with:
-          fetch-depth: 0
+          ref: ${{ github.sha }}
           persist-credentials: false
-      - name: Verify the original issue and game baseline
+      - name: Check the request and the weekly limit
+        timeout-minutes: 10
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git diff --exit-code "$BASELINE" HEAD -- . \
-            ':(exclude).github/block-muncher-pilot.py' \
-            ':(exclude).github/workflows/block-muncher-claude-pilot.yml'
-          gh api --paginate --slurp repos/barnes-ngb/block-muncher/issues/14/events > "$RUNNER_TEMP/issue-label-history.json"
-          python3 .github/block-muncher-pilot.py prompt "$GITHUB_EVENT_PATH" \
-            "$RUNNER_TEMP/issue-label-history.json" "$RUNNER_TEMP/claude-prompt.txt"
+          python3 -I .github/block-muncher-pilot.py admit "$GITHUB_EVENT_PATH" \
+            "$RUNNER_TEMP/bm/facts" "$RUNNER_TEMP/bm/admission" "$GITHUB_WORKSPACE"
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
         with:
           node-version: '22.23.2'
@@ -53,8 +99,13 @@ jobs:
         run: |
           npm install --prefix "$RUNNER_TEMP/claude-cli" --no-audit --no-fund --save-exact @anthropic-ai/claude-code@2.1.319
           mkdir "$RUNNER_TEMP/claude-work"
+      # Local clock and files only: no token, no secret. A run that waited too long stops here.
+      - name: Check the run age before the call
+        run: python3 -I .github/block-muncher-pilot.py call-gate "$RUNNER_TEMP/bm/admission/admission.json"
+      # The only step that sees a provider secret. Tools and MCP are off; one turn; bounded.
+      # The raw answer and stderr stay in the runner temp and are never printed or uploaded.
       - name: Ask Claude for one proposal
-        timeout-minutes: 3
+        timeout-minutes: 5
         working-directory: ${{ runner.temp }}/claude-work
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
@@ -69,51 +120,333 @@ jobs:
           if ! "$RUNNER_TEMP/claude-cli/node_modules/.bin/claude" -p \
             --restricted --tools '' --setting-sources '' \
             --strict-mcp-config --mcp-config '{"mcpServers":{}}' \
-            --no-session-persistence --model sonnet --max-turns 1 --max-budget-usd 0.25 \
-            --output-format json < "$RUNNER_TEMP/claude-prompt.txt" \
+            --no-session-persistence --model sonnet --max-turns 1 \
+            --max-budget-usd "$MAX_BUDGET_USD" \
+            --output-format json < "$RUNNER_TEMP/bm/admission/prompt.txt" \
             > "$RUNNER_TEMP/claude-result.json" 2> "$RUNNER_TEMP/claude-stderr.txt"; then
             echo 'Claude could not complete the proposal. Check the repository credential and provider availability.'
             exit 1
           fi
-      - name: Apply and verify the preview-only change
+      # Strict validation happens before anything is uploaded. The artifact gets only the checked
+      # diff, the three checked lines and the admission metadata: no raw answer, stderr or prompt.
+      - name: Check the answer and save only the checked parts
         run: |
-          python3 .github/block-muncher-pilot.py apply "$RUNNER_TEMP/claude-result.json" \
-            main.ts "$RUNNER_TEMP/preview-main.ts"
-          cp "$RUNNER_TEMP/preview-main.ts" main.ts
-          git diff --check
-          test "$(git diff --name-only)" = main.ts
-      - name: Build with the known Arcade toolchain
-        run: |
-          toolchain="$RUNNER_TEMP/block-muncher-pxt"
-          npm install --prefix "$toolchain" --no-audit --no-fund --save-exact pxt@0.5.1 pxt-arcade@4.1.25
-          printf '{"targetdir":"pxt-arcade"}\n' > "$toolchain/node_modules/pxtcli.json"
-          ln -s "$toolchain/node_modules" node_modules
-          node_modules/.bin/pxt clean
-          node_modules/.bin/pxt install
-          node_modules/.bin/pxt build --cloud
-      - name: Package the playable preview and its provenance
-        run: |
-          preview="$RUNNER_TEMP/block-muncher-preview"
-          mkdir "$preview"
-          cp -r assets/. "$preview/"
-          meta=$(head -n 1 assets/js/binary.js)
-          [[ "$meta" == '// meta='*'"targetVersion":"4.1.25"}' ]]
-          { printf '%s\n' "$meta"; cat built/debug/binary.js; } > "$preview/js/binary.js"
-          printf 'issue=14\ngame_baseline=%s\nworkflow_commit=%s\nrun=%s\n' \
-            "$BASELINE" "$(git rev-parse HEAD)" "$GITHUB_RUN_ID" > "$preview/SOURCE.txt"
-          git diff -- main.ts > "$preview/PREVIEW.patch"
-          sha256sum main.ts built/debug/binary.js > "$preview/SOURCE_SHA256.txt"
-          (cd "$preview"; sha256sum index.html js/loader.js js/binary.js PREVIEW.patch) > "$preview/SHA256SUMS.txt"
+          python3 -I .github/block-muncher-pilot.py screen "$RUNNER_TEMP/claude-result.json" \
+            "$GITHUB_WORKSPACE" "$RUNNER_TEMP/bm/facts" "$RUNNER_TEMP/bm/admission/admission.json" \
+            "$RUNNER_TEMP/proposal"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: block-muncher-issue-14-claude-preview
-          path: ${{ runner.temp }}/block-muncher-preview
+          name: proposal
+          path: ${{ runner.temp }}/proposal
           if-no-files-found: error
-          retention-days: 7
-      - name: Summarize the playtest
+          retention-days: 1
+      - name: Record the outcome
+        id: final
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
         run: |
+          admitted=false
+          if [[ -f "$RUNNER_TEMP/bm/admission/admitted" ]]; then admitted=true; fi
+          outcome=ok
+          if [[ "$JOB_STATUS" != success ]]; then
+            outcome=model-failed
+            if [[ -f "$RUNNER_TEMP/bm-outcome" ]]; then read -r outcome < "$RUNNER_TEMP/bm-outcome" || true; fi
+          fi
+          [[ "$outcome" =~ ^[a-z0-9-]{1,32}$ ]] || outcome=model-failed
+          echo "admitted=$admitted" >> "$GITHUB_OUTPUT"
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+  build:
+    needs: propose
+    if: github.run_attempt == 1 && needs.propose.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      outcome: ${{ steps.final.outputs.outcome }}
+    env:
+      PUPPETEER_SKIP_DOWNLOAD: 'true'
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22.23.2'
+          package-manager-cache: false
+      - name: Fetch the saved proposal
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name proposal --dir "$RUNNER_TEMP/proposal"
+      - name: Apply the proposal to the saved base
+        run: |
+          candidate="$RUNNER_TEMP/candidate"
+          mkdir "$candidate"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test -z "$(git status --porcelain --untracked-files=all)"
+          git ls-files -s > "$candidate/base-index.txt"
+          python3 -I .github/block-muncher-pilot.py apply "$RUNNER_TEMP/proposal" "$GITHUB_WORKSPACE" "$RUNNER_TEMP/applied"
+          for f in main.ts engine.ts; do
+            if [[ -f "$RUNNER_TEMP/applied/$f" ]]; then cp "$RUNNER_TEMP/applied/$f" "$f"; fi
+          done
+          # The check output would quote model-written lines, so it stays in the runner temp.
+          if ! git diff --check > "$RUNNER_TEMP/diff-check.log" 2>&1; then
+            echo 'The patch has whitespace problems. Details stay in the runner temp.'
+            exit 1
+          fi
+          changed="$(git diff --name-only)"
+          test -n "$changed"
+          while IFS= read -r f; do
+            case "$f" in main.ts|engine.ts) ;; *) echo 'A file outside the allowed list changed.'; exit 1 ;; esac
+          done <<< "$changed"
+      - name: Build with the known Arcade toolchain
+        run: |
+          # Compiler output can quote model-written source, so it goes to a file in the runner
+          # temp. A failure prints only which command failed.
+          log="$RUNNER_TEMP/build.log"
+          quiet() {
+            if ! "$@" >> "$log" 2>&1; then
+              echo "A build command failed: ${1##*/} ${2:-}. Details stay in the runner temp."
+              exit 1
+            fi
+          }
+          toolchain="$RUNNER_TEMP/block-muncher-pxt"
+          quiet npm install --prefix "$toolchain" --no-audit --no-fund --save-exact pxt@0.5.1 pxt-arcade@4.1.25
+          printf '{"targetdir":"pxt-arcade"}\n' > "$toolchain/node_modules/pxtcli.json"
+          ln -s "$toolchain/node_modules" node_modules
+          quiet node_modules/.bin/pxt clean
+          quiet node_modules/.bin/pxt install
+          quiet node_modules/.bin/pxt build --cloud
+      - name: Package the verified build
+        run: |
+          # The build may change nothing tracked except the two source files the patch touched.
+          while IFS= read -r line; do
+            case "$line" in ' M main.ts'|' M engine.ts') ;; *) echo 'The build changed an unexpected file.'; exit 1 ;; esac
+          done < <(git status --porcelain --untracked-files=all)
+          python3 -I .github/block-muncher-pilot.py package "$GITHUB_WORKSPACE" "$RUNNER_TEMP/applied" "$RUNNER_TEMP/candidate"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: candidate
+          path: ${{ runner.temp }}/candidate
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record the outcome
+        id: final
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          outcome=ok
+          if [[ "$JOB_STATUS" != success ]]; then
+            outcome=build-failed
+            if [[ -f "$RUNNER_TEMP/bm-outcome" ]]; then read -r outcome < "$RUNNER_TEMP/bm-outcome" || true; fi
+          fi
+          [[ "$outcome" =~ ^[a-z0-9-]{1,32}$ ]] || outcome=build-failed
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+  validate:
+    needs: [propose, build]
+    if: github.run_attempt == 1 && needs.build.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      manifest_sha256: ${{ steps.digest.outputs.manifest_sha256 }}
+      outcome: ${{ steps.final.outputs.outcome }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Fetch the saved snapshot
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name proposal --dir "$RUNNER_TEMP/proposal"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name candidate --dir "$RUNNER_TEMP/candidate"
+      - name: Recheck the saved build
+        run: |
+          python3 -I .github/block-muncher-pilot.py validate "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/proposal" "$RUNNER_TEMP/candidate" "$RUNNER_TEMP/validated-out"
+      - name: Read the package digest
+        id: digest
+        run: |
+          read -r digest < "$RUNNER_TEMP/validated-out/manifest.sha256"
+          [[ "$digest" =~ ^[0-9a-f]{64}$ ]]
+          echo "manifest_sha256=$digest" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: validated
+          path: ${{ runner.temp }}/validated-out/validated
+          if-no-files-found: error
+          retention-days: 1
+      - name: Record the outcome
+        id: final
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          outcome=ok
+          if [[ "$JOB_STATUS" != success ]]; then
+            outcome=validation-failed
+            if [[ -f "$RUNNER_TEMP/bm-outcome" ]]; then read -r outcome < "$RUNNER_TEMP/bm-outcome" || true; fi
+          fi
+          [[ "$outcome" =~ ^[a-z0-9-]{1,32}$ ]] || outcome=validation-failed
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+  # The only job allowed to write. It never runs model-edited files: it copies validated bytes,
+  # commits, pushes a brand-new branch (never an existing one) and opens a pull request.
+  publish:
+    needs: [propose, validate]
+    if: github.run_attempt == 1 && needs.validate.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      actions: read
+    outputs:
+      outcome: ${{ steps.final.outputs.outcome }}
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - name: Fetch the validated package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name proposal --dir "$RUNNER_TEMP/proposal"
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name validated --dir "$RUNNER_TEMP/validated"
+      - name: Recheck the live request and base
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -I .github/block-muncher-pilot.py recheck "$GITHUB_EVENT_PATH" \
+            "$RUNNER_TEMP/bm/facts" "$RUNNER_TEMP/proposal"
+      - name: Copy only the validated files
+        env:
+          MANIFEST_SHA256: ${{ needs.validate.outputs.manifest_sha256 }}
+        run: |
+          python3 -I .github/block-muncher-pilot.py prepare-publish "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/validated" "$MANIFEST_SHA256" "$RUNNER_TEMP/proposal"
+      - name: Commit and push a new branch
+        id: commit
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.manifest_sha256 }}
+        run: |
+          n="$(jq -er '.issue_number | tostring' "$RUNNER_TEMP/validated/manifest.json")"
+          [[ "$n" =~ ^[1-9][0-9]{0,8}$ ]]
+          branch="claude/kid-request-issue-$n"
+          git switch --create "$branch"
+          git add -- main.ts engine.ts assets/js/binary.js
+          staged="$(git diff --cached --name-only)"
+          grep -qx 'assets/js/binary.js' <<< "$staged"
+          while IFS= read -r f; do
+            case "$f" in main.ts|engine.ts|assets/js/binary.js) ;; *) echo 'An unexpected file was staged.'; exit 1 ;; esac
+          done <<< "$staged"
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' \
+            commit --quiet -m "Block Muncher: game idea from issue $n"
+          head="$(git rev-parse HEAD)"
+          [[ "$head" =~ ^[0-9a-f]{40}$ ]]
+          # Before any push: one child of the saved base, and the committed blobs (including the
+          # exact assets/js/binary.js, size-capped) are the validated bytes in the manifest.
+          python3 -I .github/block-muncher-pilot.py verify-commit "$GITHUB_WORKSPACE" \
+            "$RUNNER_TEMP/validated" "$MANIFEST_SHA256" "$head"
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          header="http.https://github.com/.extraheader=AUTHORIZATION: basic $auth"
+          # Create-only. The branch must not exist yet (exit code 2 = no match). The push then
+          # expects the ref to be absent (empty lease value) and is atomic; the server rejects a
+          # create command for a ref that appeared in between, so an existing branch is never moved.
+          rc=0
+          git -c "$header" ls-remote --exit-code --heads origin "refs/heads/$branch" > /dev/null 2>&1 || rc=$?
+          test "$rc" -eq 2
+          git -c "$header" push --quiet --atomic --force-with-lease="refs/heads/$branch:" \
+            origin "$head:refs/heads/$branch"
           {
-            echo 'The preview zombie moves a little slower.'
-            echo 'Compare a zombie following you in both versions on a clear stretch.'
-            echo 'Check that it still follows you and covers less distance in the preview.'
-          } >> "$GITHUB_STEP_SUMMARY"
+            echo "issue=$n"
+            echo "branch=$branch"
+            echo "head=$head"
+          } >> "$GITHUB_OUTPUT"
+      - name: Open the pull request and post fixed comments
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ steps.commit.outputs.issue }}
+          BRANCH: ${{ steps.commit.outputs.branch }}
+          HEAD_SHA: ${{ steps.commit.outputs.head }}
+          DEFAULT_BRANCH: ${{ github.event.repository.default_branch }}
+          MANIFEST_SHA256: ${{ needs.validate.outputs.manifest_sha256 }}
+        run: |
+          [[ "$ISSUE" =~ ^[1-9][0-9]{0,8}$ ]]
+          python3 -I .github/block-muncher-pilot.py pr-body "$RUNNER_TEMP/validated" "$MANIFEST_SHA256" \
+            "$RUNNER_TEMP/pr-body.md"
+          url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$DEFAULT_BRANCH" --head "$BRANCH" \
+            --title "Game idea from issue $ISSUE" --body-file "$RUNNER_TEMP/pr-body.md")"
+          [[ "$url" =~ ^https://github\.com/barnes-ngb/block-muncher/pull/[1-9][0-9]{0,8}$ ]]
+          # Ask GitHub what it created; the helper checks head SHA, head repository and base
+          # branch before any preview link is written.
+          gh api "repos/$GITHUB_REPOSITORY/pulls/${url##*/}" > "$RUNNER_TEMP/pr.json"
+          python3 -I .github/block-muncher-pilot.py comments "$RUNNER_TEMP/validated" "$MANIFEST_SHA256" \
+            "$GITHUB_WORKSPACE" "$HEAD_SHA" "$url" "$RUNNER_TEMP/pr.json" "$BRANCH" "$DEFAULT_BRANCH" \
+            "$RUNNER_TEMP/comments"
+          gh pr comment "$url" --body-file "$RUNNER_TEMP/comments/pr-comment.md"
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" --body-file "$RUNNER_TEMP/comments/issue-comment.md"
+      - name: Record the outcome
+        id: final
+        if: always()
+        env:
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          outcome=ok
+          if [[ "$JOB_STATUS" != success ]]; then
+            outcome=publish-failed
+            if [[ -f "$RUNNER_TEMP/bm-outcome" ]]; then read -r outcome < "$RUNNER_TEMP/bm-outcome" || true; fi
+          fi
+          [[ "$outcome" =~ ^[a-z0-9-]{1,32}$ ]] || outcome=publish-failed
+          echo "outcome=$outcome" >> "$GITHUB_OUTPUT"
+
+  status:
+    needs: [propose, build, validate, publish]
+    if: always() && github.run_attempt == 1 && needs.propose.outputs.admitted == 'true' && needs.publish.result != 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: Post one fixed status on the issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ISSUE: ${{ github.event.issue.number }}
+          PROPOSE: ${{ needs.propose.outputs.outcome }}
+          BUILD: ${{ needs.build.outputs.outcome }}
+          VALIDATE: ${{ needs.validate.outputs.outcome }}
+          PUBLISH: ${{ needs.publish.outputs.outcome }}
+        run: |
+          [[ "$ISSUE" =~ ^[1-9][0-9]{0,8}$ ]]
+          code=''
+          for candidate in "$PROPOSE" "$BUILD" "$VALIDATE" "$PUBLISH"; do
+            if [[ -n "$candidate" && "$candidate" != ok ]]; then code="$candidate"; break; fi
+          done
+          if [[ -z "$code" ]]; then code=publish-failed; fi
+          case "$code" in
+            run-too-old) message='Held: this run waited too long to start, so no automatic proposal was made. Nothing was changed. Ask an owner to file this idea again.' ;;
+            held-budget) message='Held: the weekly limit for automatic game ideas is reached, or could not be confirmed. Nothing was changed. Ask an owner to file this idea again after the limit resets.' ;;
+            refused-request) message='This request could not be used as a game idea (too long, empty, or not game-only). Nothing was changed.' ;;
+            model-failed) message='The automatic helper did not return an answer. Nothing was changed.' ;;
+            proposal-rejected) message='The automatic proposal broke a repository rule and was discarded. Nothing was changed.' ;;
+            build-failed) message='The proposed change did not build, so it was discarded. Nothing was changed.' ;;
+            validation-failed) message='The built proposal did not pass the independent check, so it was discarded. Nothing was changed.' ;;
+            stale-before-publish) message='This issue or the default branch changed while the proposal was being made, so it was discarded. Nothing was changed.' ;;
+            *) message='The automatic run stopped before a proposal was published. Nothing was merged.' ;;
+          esac
+          gh issue comment "$ISSUE" --repo "$GITHUB_REPOSITORY" \
+            --body "$message Run: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
