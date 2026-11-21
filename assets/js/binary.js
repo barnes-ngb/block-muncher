@@ -1723,7 +1723,7 @@ switch (step) {
     globals.SMELT_BATCH___5979 = (8);
     globals.GOLD_PICK_POWER___5981 = (6);
     globals.GOLDEN_APPLE_HEARTS___5983 = (2);
-    globals.DAY_SECONDS___5985 = (60);
+    globals.DAY_SECONDS___5985 = (70);
     globals.NIGHT_SECONDS___5987 = (120);
     globals.START_HEARTS___5871 = (5);
     globals.FIRST_NIGHT_MOBS___5989 = (3);
